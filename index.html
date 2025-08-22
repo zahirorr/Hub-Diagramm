@@ -81,7 +81,7 @@ const chart = new Chart(ctx, {
     data: { datasets: [] },
     options: {
         scales: {
-            x: { type: 'linear', min:0, max:360, ticks:{stepSize:5, callback:v=>v+'°'}, title:{display:true,text:'Winkel (°) / Angle (°)'} },
+            x: { type: 'linear', min:0, max:360, ticks:{stepSize:10, callback:v=>v+'°'}, title:{display:true,text:'Winkel (°) / Angle (°)'} },
             y: { beginAtZero:true, title:{display:true,text:'Hub (mm) / Stroke (mm)'} }
         },
         plugins: { legend:{ display:true, position:'top' } }
@@ -253,3 +253,4 @@ document.getElementById('exportPDFBtn').addEventListener('click', exportPDF);
 </script>
 </body>
 </html>
+
