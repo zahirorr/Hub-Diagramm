@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<title>Hub Diagram / Stroke Diagram</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<style>
+    body { font-family: Arial, sans-serif; background-color:#f5f5f5; padding: 20px; }
+    h2 { text-align:center; margin-bottom:20px; }
+    .container { max-width:1000px; margin:0 auto; background:white; padding:20px; border-radius:10px; box-shadow:0 0 15px rgba(0,0,0,0.1); }
+    .form-group { display:flex; flex-wrap:wrap; align-items:center; margin-bottom:15px; gap:10px; }
+    .form-group label { margin-right:10px; min-width:120px; }
+    .form-group input, .form-group select { padding:5px 10px; border-radius:5px; border:1px solid #ccc; }
+    button { padding:6px 12px; border:none; border-radius:5px; background:#0077b5; color:white; cursor:pointer; transition:0.2s; flex-shrink:0; }
+    button:hover { background:#005f8d; }
+    table { border-collapse: collapse; margin-top: 10px; width:100%; }
+    th, td { border: 1px solid #ccc; padding: 8px 12px; text-align:center; }
+    th { background:#0077b5; color:white; }
+    #myChart { margin-top:20px; background:white; border-radius:10px; box-shadow:0 0 10px rgba(0,0,0,0.1); padding:15px; }
+    .footer-link { margin-top:20px; font-size:14px; text-align:center; }
+    .footer-link a { display:inline-block; padding:5px 10px; background:#0077b5; color:white; border-radius:5px; text-decoration:none; font-weight:bold; transition:0.2s; }
+    .footer-link a:hover { background:#005f8d; }
+</style>
+</head>
+<body>
+<div class="container">
+<h2>Hub-Diagramm / Stroke Diagram</h2>
+
+<div class="form-group">
+    <label for="movementName">Bewegung Name / Movement Name: </label>
+    <input type="text" id="movementName">
+    <button id="addMovementBtn">Neue Bewegung / New Movement</button>
+</div>
+
+<div class="form-group">
+    <label for="movementSelect">Bearbeite Bewegung / Edit Movement: </label>
+    <select id="movementSelect"></select>
+</div>
+
+<div class="form-group">
+    <label for="xCoord">X (0-360°): </label>
+    <input type="number" id="xCoord" min="0" max="360">
+    <label for="yCoord">Y: </label>
+    <input type="number" id="yCoord">
+    <button id="addPointBtn">Hinzufügen / Update</button>
+</div>
+
+<h3>Bewegungen ein-/ausblenden / Show/Hide Movements:</h3>
+<div id="toggleMovements"></div>
+
+<table id="pointsTable">
+    <thead>
+        <tr><th>#</th><th>X</th><th>Y</th><th>Aktionen / Actions</th></tr>
+    </thead>
+    <tbody></tbody>
+</table>
+
+<canvas id="myChart" width="900" height="400"></canvas>
+
+<div style="text-align:center; margin-top:20px;">
+    <button id="exportPDFBtn">Diagramm als A3 PDF speichern / Save as A3 PDF</button>
+</div>
+
+<div class="footer-link">
+    Developed by Eng. Zaher Taleb | 
+    <a href="https://www.youtube.com/@Zaher.Taleb.mechanical.design" target="_blank">🎥 Visit my YouTube Channel</a>
+</div>
+</div>
+
+<script>
+const colors = ['#0077b5','#ff6f61','#6a5acd','#ffa500','#2e8b57','#ff1493','#20b2aa','#8b4513'];
+let movements = [];
+let currentMovementIndex = null;
+let editingIndex = null;
+
+const ctx = document.getElementById('myChart').getContext('2d');
+const chart = new Chart(ctx, {
+    type: 'line',
+    data: { datasets: [] },
+    options: {
+        scales: {
+            x: { type: 'linear', min:0, max:360, ticks:{stepSize:5, callback:v=>v+'°'}, title:{display:true,text:'Winkel (°) / Angle (°)'} },
+            y: { beginAtZero:true, title:{display:true,text:'Hub (mm) / Stroke (mm)'} }
+        },
+        plugins: { legend:{ display:true, position:'top' } }
+    },
+    plugins: [{
+        id: 'fullChartBorder',
+        afterDraw: chart => {
+            const ctx = chart.ctx;
+            ctx.save();
+            ctx.strokeStyle = 'black';
+            ctx.lineWidth = 2;
+            const borderPadding = 10;
+            const area = chart.chartArea;
+            ctx.strokeRect(
+                area.left - borderPadding,
+                area.top - borderPadding,
+                (area.right - area.left) + 2*borderPadding,
+                (area.bottom - area.top) + 2*borderPadding
+            );
+            ctx.restore();
+        }
+    }]
+});
+
+// --- Funktionen ---
+function addMovement() {
+    const name = document.getElementById('movementName').value.trim();
+    if(!name){ alert('Bitte einen Namen eingeben / Please enter a name.'); return;}
+    const color = colors[movements.length % colors.length];
+    const dataset = { label: name, data: [{x:0,y:0}], borderColor: color, fill:false, tension:0 };
+    movements.push({name, dataset, points:[{x:0,y:0}], visible:true});
+    chart.data.datasets.push(dataset);
+    chart.update();
+    document.getElementById('movementName').value='';
+    updateMovementSelect();
+    updateToggleMovements();
+    currentMovementIndex = movements.length-1;
+    refreshTable();
+}
+
+function updateMovementSelect(){
+    const select = document.getElementById('movementSelect');
+    select.innerHTML='';
+    movements.forEach((m,i)=>{
+        const opt=document.createElement('option');
+        opt.value=i; opt.text=m.name; select.appendChild(opt);
+    });
+    if(currentMovementIndex!==null) select.value=currentMovementIndex;
+}
+
+function selectMovement(){
+    const select = document.getElementById('movementSelect');
+    currentMovementIndex=parseInt(select.value);
+    editingIndex=null;
+    refreshTable();
+}
+
+function refreshTable(){
+    const tbody = document.querySelector('#pointsTable tbody');
+    tbody.innerHTML = '';
+    if(currentMovementIndex===null) return;
+    const movement = movements[currentMovementIndex];
+    movement.points.slice(1).forEach((point, index) => {
+        const row = document.createElement('tr');
+
+        const tdIndex = document.createElement('td'); tdIndex.textContent = index + 1;
+        const tdX = document.createElement('td'); tdX.textContent = point.x;
+        const tdY = document.createElement('td'); tdY.textContent = point.y;
+        const tdActions = document.createElement('td');
+
+        const btnEdit = document.createElement('button');
+        btnEdit.textContent = 'Bearbeiten / Change';
+        btnEdit.addEventListener('click', () => editPoint(index));
+
+        const btnDelete = document.createElement('button');
+        btnDelete.textContent = 'Löschen / Delete';
+        btnDelete.addEventListener('click', () => deletePoint(index));
+
+        tdActions.appendChild(btnEdit);
+        tdActions.appendChild(btnDelete);
+
+        row.appendChild(tdIndex);
+        row.appendChild(tdX);
+        row.appendChild(tdY);
+        row.appendChild(tdActions);
+
+        tbody.appendChild(row);
+    });
+}
+
+function addOrUpdatePoint(){
+    if(currentMovementIndex===null){ alert('Bitte zuerst eine Bewegung erstellen / Please create a movement first.'); return;}
+    const x = parseFloat(document.getElementById('xCoord').value);
+    const y = parseFloat(document.getElementById('yCoord').value);
+    if(isNaN(x)||isNaN(y)||x<0||x>360){alert('Bitte gültige X (0-360) und Y Werte eingeben / Please enter valid X (0-360) and Y values.'); return;}
+    const movement = movements[currentMovementIndex];
+    if(editingIndex!==null){ movement.points[editingIndex+1]={x,y}; editingIndex=null; } 
+    else{ movement.points.push({x,y}); }
+    movement.dataset.data = movement.points;
+    chart.update();
+    refreshTable();
+    document.getElementById('xCoord').value='';
+    document.getElementById('yCoord').value='';
+}
+
+function editPoint(index){
+    const movement = movements[currentMovementIndex];
+    const point = movement.points[index+1];
+    document.getElementById('xCoord').value = point.x;
+    document.getElementById('yCoord').value = point.y;
+    editingIndex = index;
+}
+
+function deletePoint(index){
+    const movement = movements[currentMovementIndex];
+    movement.points.splice(index+1,1);
+    movement.dataset.data = movement.points;
+    chart.update();
+    refreshTable();
+}
+
+function updateToggleMovements(){
+    const div=document.getElementById('toggleMovements');
+    div.innerHTML='';
+    movements.forEach((m,i)=>{
+        const checkbox=document.createElement('input');
+        checkbox.type='checkbox'; checkbox.checked=m.visible;
+        checkbox.id='toggle_'+i;
+        checkbox.addEventListener('change', ()=>toggleMovement(i, checkbox.checked));
+        const label=document.createElement('label');
+        label.htmlFor='toggle_'+i; label.innerText=m.name;
+        div.appendChild(checkbox); div.appendChild(label); div.appendChild(document.createTextNode(' '));
+    });
+}
+
+function toggleMovement(index, visible){
+    movements[index].visible=visible;
+    chart.data.datasets[index].hidden = !visible;
+    chart.update();
+}
+
+function exportPDF(){
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a3' });
+    const canvas = document.getElementById('myChart');
+    const imgData = canvas.toDataURL('image/png', 1.0);
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    const pageHeight = pdf.internal.pageSize.getHeight();
+    const margin = 15;
+    const pdfWidth = pageWidth - 2*margin;
+    const pdfHeight = pageHeight - 2*margin;
+    pdf.addImage(imgData, 'PNG', margin, margin, pdfWidth, pdfHeight);
+    const footerText = "Developed by Eng. Zaher Taleb | Visit my YouTube Channel";
+    const linkURL = "https://www.youtube.com/@Zaher.Taleb.mechanical.design";
+    pdf.setFontSize(12);
+    const textWidth = pdf.getTextWidth(footerText);
+    const xPos = (pageWidth - textWidth) / 2;
+    const yPos = pageHeight - 10;
+    pdf.text(footerText, xPos, yPos);
+    pdf.link(xPos, yPos - 5, textWidth, 10, { url: linkURL });
+    pdf.save('Hub_Diagram_A3.pdf');
+}
+
+// --- Event Listener für Buttons ---
+document.getElementById('addMovementBtn').addEventListener('click', addMovement);
+document.getElementById('movementSelect').addEventListener('change', selectMovement);
+document.getElementById('addPointBtn').addEventListener('click', addOrUpdatePoint);
+document.getElementById('exportPDFBtn').addEventListener('click', exportPDF);
+</script>
+</body>
+</html>
