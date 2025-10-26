@@ -87,7 +87,7 @@ const chart = new Chart(ctx, {
     data: { datasets: [] },
     options: {
         scales: {
-            x: { type: 'linear', min:0, max:360, ticks:{stepSize:10, callback:formatXAxisTick}, title:{display:true,text:'Winkel (°) & Zeit / Angle (°) & Time'} },
+            x: { type: 'linear', min:0, max:360, ticks:{stepSize:10, callback:formatXAxisTick}, title:{display:true,text:'Winkel (°) & Zeit (ms) / Angle (°) & Time (ms)'} },
             y: { beginAtZero:true, title:{display:true,text:'Hub (mm) / Stroke (mm)'} }
         },
         plugins: { legend:{ display:true, position:'top' } }
@@ -146,8 +146,8 @@ function selectMovement(){
 }
 
 function formatXAxisTick(value){
-    const time = cycleDuration > 0 ? (value / 360) * cycleDuration : 0;
-    return `${value}° (${time.toFixed(2)}s)`;
+    const timeMs = cycleDuration > 0 ? (value / 360) * cycleDuration * 1000 : 0;
+    return `${value}° (${timeMs.toFixed(0)}ms)`;
 }
 
 function updateCycleDuration(){
