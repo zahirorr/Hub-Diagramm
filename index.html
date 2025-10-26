@@ -241,26 +241,56 @@ function toggleMovement(index, visible){
     chart.update();
 }
 
-function exportPDF(){
+async function exportPDF(){
     const { jsPDF } = window.jspdf;
-    const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a3' });
-    const canvas = document.getElementById('myChart');
-    const imgData = canvas.toDataURL('image/png', 1.0);
-    const pageWidth = pdf.internal.pageSize.getWidth();
-    const pageHeight = pdf.internal.pageSize.getHeight();
-    const margin = 15;
-    const pdfWidth = pageWidth - 2*margin;
-    const pdfHeight = pageHeight - 2*margin;
-    pdf.addImage(imgData, 'PNG', margin, margin, pdfWidth, pdfHeight);
-    const footerText = "Developed by Eng. Zaher Taleb | Visit my YouTube Channel";
-    const linkURL = "https://www.youtube.com/@Zaher.Taleb.mechanical.design";
-    pdf.setFontSize(12);
-    const textWidth = pdf.getTextWidth(footerText);
-    const xPos = (pageWidth - textWidth) / 2;
-    const yPos = pageHeight - 10;
-    pdf.text(footerText, xPos, yPos);
-    pdf.link(xPos, yPos - 5, textWidth, 10, { url: linkURL });
-    pdf.save('Hub_Diagram_A3.pdf');
+    const exportButton = document.getElementById('exportPDFBtn');
+    const originalLabel = exportButton.textContent;
+    exportButton.disabled = true;
+    exportButton.textContent = 'Exportiere… / Exporting…';
+
+    try {
+        const container = document.querySelector('.container');
+        const canvas = await html2canvas(container, {
+            scale: 3,
+            backgroundColor: '#ffffff',
+            windowWidth: container.scrollWidth,
+            windowHeight: container.scrollHeight
+        });
+
+        const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a3' });
+        const imgData = canvas.toDataURL('image/png', 1.0);
+        const pageWidth = pdf.internal.pageSize.getWidth();
+        const pageHeight = pdf.internal.pageSize.getHeight();
+        const margin = 15;
+        const usableWidth = pageWidth - 2 * margin;
+        const imgHeight = (canvas.height * usableWidth) / canvas.width;
+        let heightLeft = imgHeight;
+        let position = margin;
+
+        pdf.addImage(imgData, 'PNG', margin, position, usableWidth, imgHeight);
+        heightLeft -= (pageHeight - 2 * margin);
+
+        while (heightLeft > 0) {
+            position = margin - heightLeft;
+            pdf.addPage();
+            pdf.addImage(imgData, 'PNG', margin, position, usableWidth, imgHeight);
+            heightLeft -= (pageHeight - 2 * margin);
+        }
+
+        const footerText = "Developed by Eng. Zaher Taleb | Visit my YouTube Channel";
+        const linkURL = "https://www.youtube.com/@Zaher.Taleb.mechanical.design";
+        pdf.setFontSize(12);
+        const textWidth = pdf.getTextWidth(footerText);
+        const xPos = (pageWidth - textWidth) / 2;
+        const yPos = pageHeight - 8;
+        pdf.text(footerText, xPos, yPos);
+        pdf.link(xPos, yPos - 5, textWidth, 10, { url: linkURL });
+
+        pdf.save('Hub_Diagram_A3.pdf');
+    } finally {
+        exportButton.disabled = false;
+        exportButton.textContent = originalLabel;
+    }
 }
 
 // --- Event Listener für Buttons ---
