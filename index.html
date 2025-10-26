@@ -42,8 +42,8 @@
 <div class="form-group">
     <label for="xCoord">X (0-360°): </label>
     <input type="number" id="xCoord" min="0" max="360">
-    <label for="yCoord">Y: </label>
-    <input type="number" id="yCoord">
+    <label for="yCoord">Zeit (Sekunden eingeben): </label>
+    <input type="number" id="yCoord" min="0" step="0.001">
     <button id="addPointBtn">Hinzufügen / Update</button>
 </div>
 
@@ -52,7 +52,7 @@
 
 <table id="pointsTable">
     <thead>
-        <tr><th>#</th><th>X</th><th>Y</th><th>Aktionen / Actions</th></tr>
+        <tr><th>#</th><th>X</th><th>Zeit (ms)</th><th>Aktionen / Actions</th></tr>
     </thead>
     <tbody></tbody>
 </table>
@@ -82,7 +82,7 @@ const chart = new Chart(ctx, {
     options: {
         scales: {
             x: { type: 'linear', min:0, max:360, ticks:{stepSize:10, callback:v=>v+'°'}, title:{display:true,text:'Winkel (°) / Angle (°)'} },
-            y: { beginAtZero:true, title:{display:true,text:'Hub (mm) / Stroke (mm)'} }
+            y: { beginAtZero:true, title:{display:true,text:'Zeit (ms) / Time (ms)'} }
         },
         plugins: { legend:{ display:true, position:'top' } }
     },
@@ -149,7 +149,8 @@ function refreshTable(){
 
         const tdIndex = document.createElement('td'); tdIndex.textContent = index + 1;
         const tdX = document.createElement('td'); tdX.textContent = point.x;
-        const tdY = document.createElement('td'); tdY.textContent = point.y;
+        const tdY = document.createElement('td');
+        tdY.textContent = point.y;
         const tdActions = document.createElement('td');
 
         const btnEdit = document.createElement('button');
@@ -175,10 +176,11 @@ function refreshTable(){
 function addOrUpdatePoint(){
     if(currentMovementIndex===null){ alert('Bitte zuerst eine Bewegung erstellen / Please create a movement first.'); return;}
     const x = parseFloat(document.getElementById('xCoord').value);
-    const y = parseFloat(document.getElementById('yCoord').value);
-    if(isNaN(x)||isNaN(y)||x<0||x>360){alert('Bitte gültige X (0-360) und Y Werte eingeben / Please enter valid X (0-360) and Y values.'); return;}
+    const secondsInput = parseFloat(document.getElementById('yCoord').value);
+    if(isNaN(x)||isNaN(secondsInput)||x<0||x>360||secondsInput<0){alert('Bitte gültige X (0-360) und Zeitwerte in Sekunden eingeben / Please enter valid X (0-360) and time values in seconds.'); return;}
+    const y = Math.round(secondsInput * 1000);
     const movement = movements[currentMovementIndex];
-    if(editingIndex!==null){ movement.points[editingIndex+1]={x,y}; editingIndex=null; } 
+    if(editingIndex!==null){ movement.points[editingIndex+1]={x,y}; editingIndex=null; }
     else{ movement.points.push({x,y}); }
     movement.dataset.data = movement.points;
     chart.update();
@@ -191,7 +193,7 @@ function editPoint(index){
     const movement = movements[currentMovementIndex];
     const point = movement.points[index+1];
     document.getElementById('xCoord').value = point.x;
-    document.getElementById('yCoord').value = point.y;
+    document.getElementById('yCoord').value = String(point.y / 1000);
     editingIndex = index;
 }
 
