@@ -3,9 +3,14 @@
 <head>
 <meta charset="UTF-8">
 <title>Hub Diagram / Stroke Diagram</title>
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<!-- Chart.js v4 + Annotation Plugin -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@2.2.1/dist/chartjs-plugin-annotation.min.js"></script>
+
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
 <style>
     body { font-family: Arial, sans-serif; background-color:#f5f5f5; padding: 20px; }
     h2 { text-align:center; margin-bottom:20px; }
@@ -44,6 +49,13 @@
     <input type="number" id="cycleDuration" min="0" step="0.1" value="1">
 </div>
 
+<!-- Eingabe für vertikale Linie -->
+<div class="form-group">
+    <label for="verticalLineX">Vertikale Linie bei X (°): </label>
+    <input type="number" id="verticalLineX" min="0" max="360">
+    <button id="addLineBtn">Linie hinzufügen</button>
+</div>
+
 <div class="form-group">
     <label for="xCoord">X (0-360°): </label>
     <input type="number" id="xCoord" min="0" max="360">
@@ -75,6 +87,9 @@
 </div>
 
 <script>
+// Chart.js Plugin registrieren
+Chart.register(window['chartjs-plugin-annotation']);
+
 const colors = ['#0077b5','#ff6f61','#6a5acd','#ffa500','#2e8b57','#ff1493','#20b2aa','#8b4513'];
 let movements = [];
 let currentMovementIndex = null;
@@ -90,7 +105,10 @@ const chart = new Chart(ctx, {
             x: { type: 'linear', min:0, max:360, ticks:{stepSize:10, callback:formatXAxisTick}, title:{display:true,text:'Winkel (°) & Zeit (ms) / Angle (°) & Time (ms)'} },
             y: { beginAtZero:true, title:{display:true,text:'Hub (mm) / Stroke (mm)'} }
         },
-        plugins: { legend:{ display:true, position:'top' } }
+        plugins: { 
+            legend:{ display:true, position:'top' },
+            annotation: { annotations: {} }
+        }
     },
     plugins: [{
         id: 'fullChartBorder',
@@ -263,13 +281,44 @@ function exportPDF(){
     pdf.save('Hub_Diagram_A3.pdf');
 }
 
-// --- Event Listener für Buttons ---
+// --- Vertikale Linie hinzufügen ---
+function addVerticalLine() {
+    const xValue = parseFloat(document.getElementById('verticalLineX').value);
+    if (isNaN(xValue) || xValue < 0 || xValue > 360) {
+        alert('Bitte einen gültigen X-Wert zwischen 0 und 360 eingeben.');
+        return;
+    }
+
+    chart.options.plugins.annotation.annotations = {
+        taktLine: {
+            type: 'line',
+            xMin: xValue,
+            xMax: xValue,
+            borderColor: 'red',
+            borderWidth: 2,
+            label: {
+                display: true,
+                content: 'Maschine-Taktet',
+                position: 'start',
+                backgroundColor: 'rgba(255,0,0,0.7)',
+                color: 'white',
+                font: { weight: 'bold' }
+            }
+        }
+    };
+    chart.update();
+}
+
+// --- Event Listener ---
 document.getElementById('addMovementBtn').addEventListener('click', addMovement);
 document.getElementById('movementSelect').addEventListener('change', selectMovement);
 document.getElementById('addPointBtn').addEventListener('click', addOrUpdatePoint);
 document.getElementById('cycleDuration').addEventListener('input', updateCycleDuration);
 document.getElementById('exportPDFBtn').addEventListener('click', exportPDF);
+document.getElementById('addLineBtn').addEventListener('click', addVerticalLine);
 </script>
 </body>
 </html>
+
+
 
