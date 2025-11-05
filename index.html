@@ -11,6 +11,9 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 
+<!-- XLSX für Export/Import -->
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
 <style>
     body { font-family: Arial, sans-serif; background-color:#f5f5f5; padding: 20px; }
     h2 { text-align:center; margin-bottom:20px; }
@@ -78,6 +81,10 @@
 
 <div style="text-align:center; margin-top:20px;">
     <button id="exportPDFBtn">Diagramm als A3 PDF speichern / Save as A3 PDF</button>
+    <button id="exportExcelBtn">📤 Daten exportieren (Excel)</button>
+    <input type="file" id="importExcelInput" style="display:none" accept=".xlsx">
+    <button id="importExcelBtn">📥 Daten importieren (Excel)</button>
+    <button id="clearAllBtn" style="background:#ff5555;">🧹 Alles löschen</button>
 </div>
 
 <div class="footer-link">
@@ -130,6 +137,32 @@ const chart = new Chart(ctx, {
     }]
 });
 
+// --- Speicherfunktionen ---
+function saveData() {
+    localStorage.setItem('movements', JSON.stringify(movements));
+    localStorage.setItem('cycleDuration', cycleDuration);
+}
+
+function loadData() {
+    const savedMovements = localStorage.getItem('movements');
+    const savedCycleDuration = localStorage.getItem('cycleDuration');
+
+    if (savedMovements) {
+        movements = JSON.parse(savedMovements);
+        cycleDuration = parseFloat(savedCycleDuration) || 1;
+
+        chart.data.datasets = movements.map(m => m.dataset);
+        chart.update();
+
+        updateMovementSelect();
+        updateToggleMovements();
+        if (movements.length > 0) {
+            currentMovementIndex = 0;
+            refreshTable();
+        }
+    }
+}
+
 // --- Funktionen ---
 function addMovement() {
     const name = document.getElementById('movementName').value.trim();
@@ -144,6 +177,7 @@ function addMovement() {
     updateToggleMovements();
     currentMovementIndex = movements.length-1;
     refreshTable();
+    saveData();
 }
 
 function updateMovementSelect(){
@@ -173,6 +207,7 @@ function updateCycleDuration(){
     const newDuration = parseFloat(input.value);
     cycleDuration = newDuration > 0 ? newDuration : 0;
     chart.update();
+    saveData();
 }
 
 function refreshTable(){
@@ -182,7 +217,6 @@ function refreshTable(){
     const movement = movements[currentMovementIndex];
     movement.points.slice(1).forEach((point, index) => {
         const row = document.createElement('tr');
-
         const tdIndex = document.createElement('td'); tdIndex.textContent = index + 1;
         const tdX = document.createElement('td'); tdX.textContent = point.x;
         const tdY = document.createElement('td'); tdY.textContent = point.y;
@@ -203,7 +237,6 @@ function refreshTable(){
         row.appendChild(tdX);
         row.appendChild(tdY);
         row.appendChild(tdActions);
-
         tbody.appendChild(row);
     });
 }
@@ -221,6 +254,7 @@ function addOrUpdatePoint(){
     refreshTable();
     document.getElementById('xCoord').value='';
     document.getElementById('yCoord').value='';
+    saveData();
 }
 
 function editPoint(index){
@@ -237,6 +271,7 @@ function deletePoint(index){
     movement.dataset.data = movement.points;
     chart.update();
     refreshTable();
+    saveData();
 }
 
 function updateToggleMovements(){
@@ -257,6 +292,7 @@ function toggleMovement(index, visible){
     movements[index].visible=visible;
     chart.data.datasets[index].hidden = !visible;
     chart.update();
+    saveData();
 }
 
 function exportPDF(){
@@ -309,6 +345,62 @@ function addVerticalLine() {
     chart.update();
 }
 
+// --- NEUE FUNKTIONEN ---
+
+// 🧹 Alles löschen
+function clearAll() {
+    if (!confirm("Bist du sicher, dass du alle Daten löschen willst?")) return;
+    localStorage.clear();
+    movements = [];
+    chart.data.datasets = [];
+    chart.update();
+    updateMovementSelect();
+    updateToggleMovements();
+    document.querySelector('#pointsTable tbody').innerHTML = '';
+    alert("Alle Daten wurden gelöscht!");
+}
+
+// 📤 Export nach Excel
+function exportToExcel() {
+    if (movements.length === 0) { alert("Keine Daten zum Exportieren."); return; }
+
+    let wb = XLSX.utils.book_new();
+    movements.forEach(m => {
+        let sheetData = [["X", "Y"]];
+        m.points.forEach(p => sheetData.push([p.x, p.y]));
+        let ws = XLSX.utils.aoa_to_sheet(sheetData);
+        XLSX.utils.book_append_sheet(wb, ws, m.name.substring(0, 31));
+    });
+    XLSX.writeFile(wb, "HubDiagram_Data.xlsx");
+}
+
+// 📥 Import aus Excel
+function importFromExcel(file) {
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        const data = new Uint8Array(e.target.result);
+        const workbook = XLSX.read(data, { type: "array" });
+        movements = [];
+        chart.data.datasets = [];
+        workbook.SheetNames.forEach((name, i) => {
+            const ws = workbook.Sheets[name];
+            const rows = XLSX.utils.sheet_to_json(ws, { header: 1 });
+            const color = colors[i % colors.length];
+            const points = rows.slice(1).map(r => ({x: parseFloat(r[0]), y: parseFloat(r[1])})).filter(p => !isNaN(p.x));
+            const dataset = { label: name, data: points, borderColor: color, fill:false, tension:0 };
+            movements.push({ name, dataset, points, visible:true });
+            chart.data.datasets.push(dataset);
+        });
+        chart.update();
+        updateMovementSelect();
+        updateToggleMovements();
+        refreshTable();
+        saveData();
+        alert("Daten erfolgreich importiert!");
+    };
+    reader.readAsArrayBuffer(file);
+}
+
 // --- Event Listener ---
 document.getElementById('addMovementBtn').addEventListener('click', addMovement);
 document.getElementById('movementSelect').addEventListener('change', selectMovement);
@@ -316,9 +408,13 @@ document.getElementById('addPointBtn').addEventListener('click', addOrUpdatePoin
 document.getElementById('cycleDuration').addEventListener('input', updateCycleDuration);
 document.getElementById('exportPDFBtn').addEventListener('click', exportPDF);
 document.getElementById('addLineBtn').addEventListener('click', addVerticalLine);
+document.getElementById('clearAllBtn').addEventListener('click', clearAll);
+document.getElementById('exportExcelBtn').addEventListener('click', exportToExcel);
+document.getElementById('importExcelBtn').addEventListener('click', () => document.getElementById('importExcelInput').click());
+document.getElementById('importExcelInput').addEventListener('change', e => importFromExcel(e.target.files[0]));
+
+// --- Beim Start gespeicherte Daten laden ---
+loadData();
 </script>
 </body>
 </html>
-
-
-
