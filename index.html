@@ -26,7 +26,10 @@
     table { border-collapse: collapse; margin-top: 10px; width:100%; }
     th, td { border: 1px solid #ccc; padding: 8px 12px; text-align:center; }
     th { background:#0077b5; color:white; }
-    #myChart { margin-top:20px; background:white; border-radius:10px; box-shadow:0 0 10px rgba(0,0,0,0.1); padding:15px; }
+    #myChart, #velChart, #accChart {
+        margin-top:20px; background:white; border-radius:10px;
+        box-shadow:0 0 10px rgba(0,0,0,0.1); padding:15px;
+    }
     .footer-link { margin-top:20px; font-size:14px; text-align:center; }
     .footer-link a { display:inline-block; padding:5px 10px; background:#0077b5; color:white; border-radius:5px; text-decoration:none; font-weight:bold; transition:0.2s; }
     .footer-link a:hover { background:#005f8d; }
@@ -77,7 +80,12 @@
     <tbody></tbody>
 </table>
 
+<!-- Hub / Stroke chart -->
 <canvas id="myChart" width="900" height="400"></canvas>
+<!-- Velocity chart -->
+<canvas id="velChart" width="900" height="300"></canvas>
+<!-- Acceleration chart -->
+<canvas id="accChart" width="900" height="300"></canvas>
 
 <div style="text-align:center; margin-top:20px;">
     <button id="exportPDFBtn">Diagramm als A3 PDF speichern / Save as A3 PDF</button>
@@ -108,7 +116,11 @@ let currentMovementIndex = null;
 let editingIndex = null;
 let cycleDuration = 1;
 
+// --- Charts ---
 const ctx = document.getElementById('myChart').getContext('2d');
+const velCtx = document.getElementById('velChart').getContext('2d');
+const accCtx = document.getElementById('accChart').getContext('2d');
+
 const chart = new Chart(ctx, {
     type: 'line',
     data: { datasets: [] },
@@ -142,6 +154,30 @@ const chart = new Chart(ctx, {
     }]
 });
 
+const velChart = new Chart(velCtx, {
+    type: 'line',
+    data: { datasets: [] },
+    options: {
+        scales: {
+            x: { type:'linear', min:0, max:360, title:{display:true, text:'Winkel (°) / Angle'} },
+            y: { title:{display:true, text:'Geschwindigkeit (mm/s)'} }
+        },
+        plugins:{ legend:{display:false} }
+    }
+});
+
+const accChart = new Chart(accCtx, {
+    type: 'line',
+    data: { datasets: [] },
+    options: {
+        scales: {
+            x: { type:'linear', min:0, max:360, title:{display:true, text:'Winkel (°) / Angle'} },
+            y: { title:{display:true, text:'Beschleunigung (mm/s²)'} }
+        },
+        plugins:{ legend:{display:false} }
+    }
+});
+
 // --- Speicherfunktionen ---
 function saveData() {
     localStorage.setItem('movements', JSON.stringify(movements));
@@ -155,6 +191,7 @@ function loadData() {
     if (savedMovements) {
         movements = JSON.parse(savedMovements);
         cycleDuration = parseFloat(savedCycleDuration) || 1;
+        document.getElementById('cycleDuration').value = cycleDuration;
 
         chart.data.datasets = movements.map(m => m.dataset);
         chart.update();
@@ -164,6 +201,7 @@ function loadData() {
         if (movements.length > 0) {
             currentMovementIndex = 0;
             refreshTable();
+            updateDerivedCharts();
         }
     }
 }
@@ -182,6 +220,7 @@ function addMovement() {
     updateToggleMovements();
     currentMovementIndex = movements.length-1;
     refreshTable();
+    updateDerivedCharts();
     saveData();
 }
 
@@ -200,6 +239,7 @@ function selectMovement(){
     currentMovementIndex=parseInt(select.value);
     editingIndex=null;
     refreshTable();
+    updateDerivedCharts();
 }
 
 function formatXAxisTick(value){
@@ -212,6 +252,7 @@ function updateCycleDuration(){
     const newDuration = parseFloat(input.value);
     cycleDuration = newDuration > 0 ? newDuration : 0;
     chart.update();
+    updateDerivedCharts();
     saveData();
 }
 
@@ -262,7 +303,7 @@ function addOrUpdatePoint(){
         movement.points.push({x,y}); 
     }
 
-    // ✅ sort & dedupe by angle to avoid duplicate [0,0] etc.
+    // sort & dedupe
     movement.points.sort((a,b)=>a.x-b.x);
     const clean = [];
     let lastX = null;
@@ -277,6 +318,7 @@ function addOrUpdatePoint(){
     movement.dataset.data = movement.points;
     chart.update();
     refreshTable();
+    updateDerivedCharts();
     document.getElementById('xCoord').value='';
     document.getElementById('yCoord').value='';
     saveData();
@@ -296,6 +338,7 @@ function deletePoint(index){
     movement.dataset.data = movement.points;
     chart.update();
     refreshTable();
+    updateDerivedCharts();
     saveData();
 }
 
@@ -368,6 +411,119 @@ function addVerticalLine() {
         }
     };
     chart.update();
+}
+
+/* ========= Abgeleitete Diagramme: Geschwindigkeit & Beschleunigung ========= */
+
+function buildCleanPoints(movement) {
+    if (!movement) return [];
+    const pts = movement.points.slice().filter(p => !isNaN(p.x) && !isNaN(p.y));
+    pts.sort((a,b)=>a.x-b.x);
+    const clean = [];
+    let lastX = null;
+    pts.forEach(p=>{
+        if(p.x !== lastX){
+            clean.push({x:p.x, y:p.y});
+            lastX = p.x;
+        }
+    });
+    return clean;
+}
+
+// Smoothstep Interpolation wie im Macro
+function strokeAt(angle, pts) {
+    if (!pts || pts.length === 0) return 0;
+    if (angle <= pts[0].x) return pts[0].y;
+    if (angle >= pts[pts.length-1].x) return pts[pts.length-1].y;
+
+    for (let i=0; i<pts.length-1; i++) {
+        const a1 = pts[i].x;
+        const y1 = pts[i].y;
+        const a2 = pts[i+1].x;
+        const y2 = pts[i+1].y;
+        if (a1 <= angle && angle <= a2) {
+            const t = (angle - a1) / (a2 - a1);
+            const s = 3*t*t - 2*t*t*t; // smoothstep
+            return y1 + (y2 - y1) * s;
+        }
+    }
+    return pts[pts.length-1].y;
+}
+
+function updateDerivedCharts() {
+    if (currentMovementIndex === null || !movements[currentMovementIndex]) {
+        velChart.data.datasets = [];
+        accChart.data.datasets = [];
+        velChart.update();
+        accChart.update();
+        return;
+    }
+
+    const movement = movements[currentMovementIndex];
+    const pts = buildCleanPoints(movement);
+
+    if (pts.length < 2) {
+        velChart.data.datasets = [];
+        accChart.data.datasets = [];
+        velChart.update();
+        accChart.update();
+        return;
+    }
+
+    const stepDeg = 1; // 1° resolution
+    const angles = [];
+    const y = [];
+
+    for (let a = 0; a <= 360; a += stepDeg) {
+        angles.push(a);
+        y.push(strokeAt(a, pts));
+    }
+
+    const n = angles.length;
+    const dy_dphi = new Array(n).fill(0); // dy/dφ [mm/deg]
+
+    for (let i = 1; i < n-1; i++) {
+        dy_dphi[i] = (y[i+1] - y[i-1]) / (2*stepDeg);
+    }
+    dy_dphi[0] = (y[1] - y[0]) / stepDeg;
+    dy_dphi[n-1] = (y[n-1] - y[n-2]) / stepDeg;
+
+    let vel = new Array(n).fill(0);
+    let acc = new Array(n).fill(0);
+
+    if (cycleDuration > 0) {
+        const omega = 360 / cycleDuration;              // deg/s
+        const dt = cycleDuration * stepDeg / 360.0;     // s per step
+
+        for (let i=0; i<n; i++) {
+            vel[i] = dy_dphi[i] * omega;                // mm/s
+        }
+
+        for (let i=1; i<n-1; i++) {
+            acc[i] = (vel[i+1] - vel[i-1]) / (2*dt);    // mm/s²
+        }
+        acc[0] = (vel[1] - vel[0]) / dt;
+        acc[n-1] = (vel[n-1] - vel[n-2]) / dt;
+    }
+
+    velChart.data.datasets = [{
+        label: 'Geschwindigkeit',
+        data: angles.map((a,i)=>({x:a,y:vel[i]})),
+        borderColor: '#2e8b57',
+        fill:false,
+        tension:0.2
+    }];
+
+    accChart.data.datasets = [{
+        label: 'Beschleunigung',
+        data: angles.map((a,i)=>({x:a,y:acc[i]})),
+        borderColor: '#ff0000',
+        fill:false,
+        tension:0.2
+    }];
+
+    velChart.update();
+    accChart.update();
 }
 
 /* ========= FreeCAD Macro Export (Cam, smooth) ========= */
@@ -489,6 +645,10 @@ function clearAll() {
     updateMovementSelect();
     updateToggleMovements();
     document.querySelector('#pointsTable tbody').innerHTML = '';
+    velChart.data.datasets = [];
+    accChart.data.datasets = [];
+    velChart.update();
+    accChart.update();
     alert("Alle Daten wurden gelöscht!");
 }
 
@@ -527,6 +687,7 @@ function importFromExcel(file) {
         updateMovementSelect();
         updateToggleMovements();
         refreshTable();
+        updateDerivedCharts();
         saveData();
         alert("Daten erfolgreich importiert!");
     };
