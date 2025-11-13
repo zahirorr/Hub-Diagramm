@@ -87,6 +87,11 @@
     <button id="clearAllBtn" style="background:#ff5555;">🧹 Alles löschen</button>
 </div>
 
+<!-- Neue Reihe: FreeCAD Makro Export -->
+<div style="text-align:center; margin-top:10px;">
+    <button id="exportMacroBtn">🧩 FreeCAD Makro (.FCMacro)</button>
+</div>
+
 <div class="footer-link">
     Developed by Eng. Zaher Taleb | 
     <a href="https://www.youtube.com/@Zaher.Taleb.mechanical.design" target="_blank">🎥 Visit my YouTube Channel</a>
@@ -245,10 +250,30 @@ function addOrUpdatePoint(){
     if(currentMovementIndex===null){ alert('Bitte zuerst eine Bewegung erstellen / Please create a movement first.'); return;}
     const x = parseFloat(document.getElementById('xCoord').value);
     const y = parseFloat(document.getElementById('yCoord').value);
-    if(isNaN(x)||isNaN(y)||x<0||x>360){alert('Bitte gültige X (0-360) und Y Werte eingeben / Please enter valid X (0-360) and Y values.'); return;}
+    if(isNaN(x)||isNaN(y)||x<0||x>360){
+        alert('Bitte gültige X (0-360) und Y Werte eingeben / Please enter valid X (0-360) and Y values.');
+        return;
+    }
     const movement = movements[currentMovementIndex];
-    if(editingIndex!==null){ movement.points[editingIndex+1]={x,y}; editingIndex=null; } 
-    else{ movement.points.push({x,y}); }
+    if(editingIndex!==null){ 
+        movement.points[editingIndex+1]={x,y}; 
+        editingIndex=null; 
+    } else { 
+        movement.points.push({x,y}); 
+    }
+
+    // ✅ sort & dedupe by angle to avoid duplicate [0,0] etc.
+    movement.points.sort((a,b)=>a.x-b.x);
+    const clean = [];
+    let lastX = null;
+    movement.points.forEach(p=>{
+        if(p.x !== lastX){
+            clean.push(p);
+            lastX = p.x;
+        }
+    });
+    movement.points = clean;
+
     movement.dataset.data = movement.points;
     chart.update();
     refreshTable();
@@ -345,6 +370,113 @@ function addVerticalLine() {
     chart.update();
 }
 
+/* ========= FreeCAD Macro Export (Cam, smooth) ========= */
+function exportFreeCADMacro() {
+    if (currentMovementIndex === null) {
+        alert("Bitte zuerst eine Bewegung auswählen.");
+        return;
+    }
+
+    const movement = movements[currentMovementIndex];
+    let pts = movement.points.slice();
+    if (pts.length < 2){
+        alert("Nicht genug Punkte für ein Makro.");
+        return;
+    }
+
+    // sort & dedupe by angle
+    pts.sort((a,b)=>a.x-b.x);
+    const clean = [];
+    let lastX = null;
+    pts.forEach(p=>{
+        if (p.x !== lastX) {
+            clean.push(p);
+            lastX = p.x;
+        }
+    });
+
+    // ensure 0° and 360° exist
+    if (clean[0].x > 0) clean.unshift({x:0, y:clean[0].y});
+    if (clean[clean.length-1].x < 360) clean.push({x:360, y:clean[clean.length-1].y});
+
+    let pyPoints = "";
+    clean.forEach(p=>{
+        pyPoints += `    [${p.x}, ${p.y}],\n`;
+    });
+
+    const macro = `
+import FreeCAD as App
+import Part, math
+
+motion_points = [
+${pyPoints}
+]
+
+# sort and remove duplicate angles
+motion_points = sorted(motion_points, key=lambda p: p[0])
+clean = []
+last = None
+for a, y in motion_points:
+    if a != last:
+        clean.append([a, y])
+        last = a
+motion_points = clean
+
+# ensure 0° and 360° exist
+if motion_points[0][0] > 0:
+    motion_points.insert(0, [0, motion_points[0][1]])
+if motion_points[-1][0] < 360:
+    motion_points.append([360, motion_points[-1][1]])
+
+base_radius   = 125.0
+step_angle    = 0.5
+angle_offset  = 180.0
+cam_thickness = 12.0
+
+def smoothstep(a, a1, a2, y1, y2):
+    t = (a - a1) / (a2 - a1)
+    return y1 + (y2 - y1) * (3*t*t - 2*t*t*t)
+
+def lift_at(a):
+    for i in range(len(motion_points)-1):
+        a1, y1 = motion_points[i]
+        a2, y2 = motion_points[i+1]
+        if a1 <= a <= a2:
+            return smoothstep(a, a1, a2, y1, y2)
+    return motion_points[-1][1]
+
+points = []
+a = 0.0
+while a <= 360.0:
+    L = lift_at(a)
+    r = base_radius + L
+    t = math.radians(-(a + angle_offset))
+    x = r * math.cos(t)
+    y = r * math.sin(t)
+    points.append(App.Vector(x, y, 0))
+    a += step_angle
+
+points.append(points[0])
+
+wire = Part.makePolygon(points)
+face = Part.Face(wire)
+solid = face.extrude(App.Vector(0,0,cam_thickness))
+
+doc = App.newDocument("CamProfile")
+obj = doc.addObject("Part::Feature", "CamSolid")
+obj.Shape = solid
+doc.recompute()
+
+print("Cam created successfully with", len(points), "points.")
+`;
+
+    const blob = new Blob([macro], { type: "text/plain" });
+    const aLink = document.createElement("a");
+    aLink.href = URL.createObjectURL(blob);
+    aLink.download = (movement.name || "GenerateCam") + ".FCMacro";
+    aLink.click();
+}
+
 // --- NEUE FUNKTIONEN ---
 
 // 🧹 Alles löschen
@@ -412,6 +544,7 @@ document.getElementById('clearAllBtn').addEventListener('click', clearAll);
 document.getElementById('exportExcelBtn').addEventListener('click', exportToExcel);
 document.getElementById('importExcelBtn').addEventListener('click', () => document.getElementById('importExcelInput').click());
 document.getElementById('importExcelInput').addEventListener('change', e => importFromExcel(e.target.files[0]));
+document.getElementById('exportMacroBtn').addEventListener('click', exportFreeCADMacro);
 
 // --- Beim Start gespeicherte Daten laden ---
 loadData();
