@@ -33,6 +33,15 @@
     .footer-link { margin-top:20px; font-size:14px; text-align:center; }
     .footer-link a { display:inline-block; padding:5px 10px; background:#0077b5; color:white; border-radius:5px; text-decoration:none; font-weight:bold; transition:0.2s; }
     .footer-link a:hover { background:#005f8d; }
+
+    /* Simulation Canvas */
+    #simCanvas {
+        background:#fafafa;
+        border:1px solid #ccc;
+        border-radius:8px;
+        display:block;
+        margin:0 auto 10px;
+    }
 </style>
 </head>
 <body>
@@ -95,6 +104,12 @@
 
 <h3>Bewegungen ein-/ausblenden / Show/Hide Movements:</h3>
 <div id="toggleMovements"></div>
+<div class="form-group">
+    <label>
+        <input type="checkbox" id="toggleSmoothPreview" checked>
+        Show Smooth Curve Preview
+    </label>
+</div>
 
 <table id="pointsTable">
     <thead>
@@ -117,6 +132,14 @@
 <canvas id="velChart" width="900" height="300"></canvas>
 <!-- Acceleration chart -->
 <canvas id="accChart" width="900" height="300"></canvas>
+
+<!-- Follower Simulation -->
+<h3>Follower Simulation / Mitnehmer-Animation</h3>
+<canvas id="simCanvas" width="400" height="220"></canvas>
+<div style="text-align:center; margin-bottom:20px;">
+    <button id="startSimBtn">▶ Start Simulation</button>
+    <button id="stopSimBtn">⏸ Stop Simulation</button>
+</div>
 
 <div style="text-align:center; margin-top:20px;">
     <button id="exportPDFBtn">Alle Diagramme als A3 PDF speichern / Save all as A3 PDF</button>
@@ -156,6 +179,21 @@ let movements = [];
 let currentMovementIndex = null;
 let editingIndex = null;
 let cycleDuration = 1;
+
+// Smooth preview dataset (for current movement)
+let smoothPreviewDataset = {
+    label: 'Smooth Preview (current movement)',
+    data: [],
+    borderColor: '#000000',
+    borderDash: [5,4],
+    fill: false,
+    tension: 0
+};
+
+// Follower simulation state
+let simRunning = false;
+let simAngle = 0;       // deg
+let lastSimTime = null;
 
 // --- helper: cam parameters ---
 function getCamParameters() {
@@ -228,6 +266,18 @@ const accChart = new Chart(accCtx, {
     }
 });
 
+// Make sure smoothPreviewDataset exists in chart datasets only once
+function ensureSmoothDataset() {
+    const ds = chart.data.datasets;
+    if (!ds.includes(smoothPreviewDataset)) {
+        ds.push(smoothPreviewDataset);
+    }
+
+    const checkbox = document.getElementById("toggleSmoothPreview");
+    if (checkbox) {
+        smoothPreviewDataset.hidden = !checkbox.checked;
+    }
+}
 // --- Speicherfunktionen ---
 function saveData() {
     localStorage.setItem('movements', JSON.stringify(movements));
@@ -264,6 +314,7 @@ function loadData() {
         document.getElementById('cycleDuration').value = cycleDuration;
 
         chart.data.datasets = movements.map(m => m.dataset);
+        ensureSmoothDataset();
         chart.update();
 
         updateMovementSelect();
@@ -273,6 +324,8 @@ function loadData() {
             refreshTable();
             refreshSegmentTable();
             updateDerivedCharts();
+            updateSmoothPreview();
+            drawSimulation(); // initial static draw
         }
     }
 }
@@ -288,6 +341,7 @@ function addMovement() {
 
     movements.push(movement);
     chart.data.datasets.push(dataset);
+    ensureSmoothDataset();
     chart.update();
     document.getElementById('movementName').value='';
     currentMovementIndex = movements.length-1;
@@ -297,6 +351,8 @@ function addMovement() {
     refreshTable();
     refreshSegmentTable();
     updateDerivedCharts();
+    updateSmoothPreview();
+    drawSimulation();
     saveData();
 }
 
@@ -317,6 +373,8 @@ function selectMovement(){
     refreshTable();
     refreshSegmentTable();
     updateDerivedCharts();
+    updateSmoothPreview();
+    drawSimulation();
 }
 
 function formatXAxisTick(value){
@@ -330,6 +388,7 @@ function updateCycleDuration(){
     cycleDuration = newDuration > 0 ? newDuration : 0;
     chart.update();
     updateDerivedCharts();
+    updateSmoothPreview();
     saveData();
 }
 
@@ -391,6 +450,8 @@ function changeSegmentLaw(index, lawId){
     movement.segmentLaws[index] = lawId;
     saveData();
     updateDerivedCharts();
+    updateSmoothPreview();
+    drawSimulation();
 }
 
 // --- Punkt hinzufügen/ändern ---
@@ -427,6 +488,8 @@ function addOrUpdatePoint(){
     refreshTable();
     refreshSegmentTable();
     updateDerivedCharts();
+    updateSmoothPreview();
+    drawSimulation();
     document.getElementById('xCoord').value='';
     document.getElementById('yCoord').value='';
     saveData();
@@ -449,6 +512,8 @@ function deletePoint(index){
     refreshTable();
     refreshSegmentTable();
     updateDerivedCharts();
+    updateSmoothPreview();
+    drawSimulation();
     saveData();
 }
 
@@ -619,6 +684,36 @@ function strokeAtAngle(angle, movement, pts){
     return pts[pts.length-1].y;
 }
 
+/* ========= Smooth Curve Preview on Stroke Chart ========= */
+
+function updateSmoothPreview() {
+    if (currentMovementIndex === null || !movements[currentMovementIndex]) {
+        smoothPreviewDataset.data = [];
+        chart.update();
+        return;
+    }
+
+    const movement = movements[currentMovementIndex];
+    const pts = buildCleanPoints(movement);
+    rebuildSegmentLaws(movement);
+
+    if (pts.length < 2) {
+        smoothPreviewDataset.data = [];
+        chart.update();
+        return;
+    }
+
+    const stepDeg = 1;
+    const data = [];
+    for (let a = 0; a <= 360; a += stepDeg) {
+        data.push({ x: a, y: strokeAtAngle(a, movement, pts) });
+    }
+
+    smoothPreviewDataset.data = data;
+    ensureSmoothDataset();
+    chart.update();
+}
+
 /* ========= Abgeleitete Diagramme: Geschwindigkeit & Beschleunigung ========= */
 
 function updateDerivedCharts() {
@@ -697,6 +792,9 @@ function updateDerivedCharts() {
 
     velChart.update();
     accChart.update();
+
+    // also update smooth preview
+    updateSmoothPreview();
 }
 
 /* ========= FreeCAD Macro Export – BSpline Approximation + Hole ========= */
@@ -854,7 +952,7 @@ print("Cam created successfully with BSpline approximation and center hole.")
     aLink.click();
 }
 
-/* ========= SolidWorks Macro Export – TXT VBA file, scaled to meters + hole ========= */
+/* ========= SolidWorks Macro Export – TXT VBA file, scaled to meters ========= */
 function exportSolidWorksMacroTXT() {
     if (currentMovementIndex === null) {
         alert("Please select a movement first.");
@@ -952,12 +1050,16 @@ End Sub
     aLink.href = URL.createObjectURL(blob);
     aLink.download = (movement.name || "CamProfile") + "_SolidWorksMacro.txt";
     aLink.click();
-}// 🧹 Alles löschen
+}
+
+// 🧹 Alles löschen
 function clearAll() {
     if (!confirm("Bist du sicher, dass du alle Daten löschen willst?")) return;
     localStorage.clear();
     movements = [];
     chart.data.datasets = [];
+    ensureSmoothDataset();
+    smoothPreviewDataset.data = [];
     chart.update();
     updateMovementSelect();
     updateToggleMovements();
@@ -967,6 +1069,7 @@ function clearAll() {
     accChart.data.datasets = [];
     velChart.update();
     accChart.update();
+    drawSimulation();
     alert("Alle Daten wurden gelöscht!");
 }
 
@@ -1005,19 +1108,148 @@ function importFromExcel(file) {
             movements.push(movement);
             chart.data.datasets.push(dataset);
         });
+        ensureSmoothDataset();
         chart.update();
         updateMovementSelect();
         updateToggleMovements();
+        if (movements.length > 0) currentMovementIndex = 0;
         refreshTable();
         refreshSegmentTable();
         updateDerivedCharts();
+        updateSmoothPreview();
+        drawSimulation();
         saveData();
         alert("Daten erfolgreich importiert!");
     };
     reader.readAsArrayBuffer(file);
 }
 
-// --- Event Listener ---
+/* ========= Follower Simulation ========= */
+
+function drawSimulation() {
+    const canvas = document.getElementById('simCanvas');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+
+    if (currentMovementIndex === null || !movements[currentMovementIndex]) {
+        // nothing to draw
+        return;
+    }
+
+    const movement = movements[currentMovementIndex];
+    const pts = buildCleanPoints(movement);
+    rebuildSegmentLaws(movement);
+    if (pts.length < 2) return;
+
+    const params = getCamParameters();
+
+    // Stroke at current angle
+    const stroke = strokeAtAngle(simAngle, movement, pts); // mm
+
+    // Determine scale based on max stroke
+    const maxStroke = pts.reduce((m,p)=>Math.max(m,p.y),0) || 1;
+    const margin = 25;
+    const w = canvas.width;
+    const h = canvas.height;
+
+    const camX = 90;
+    const camY = h - margin - 40;
+    const camRadiusPx = 40;
+
+    const followerX = w - 120;
+    const baseY = h - margin;
+
+    const usableHeight = baseY - margin;
+    const scale = usableHeight / (maxStroke || 1);
+
+    const followerY = baseY - stroke * scale;
+
+    // Background ground line
+    ctx.strokeStyle = '#999';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(margin, baseY);
+    ctx.lineTo(w - margin, baseY);
+    ctx.stroke();
+
+    // Draw cam base circle
+    ctx.save();
+    ctx.translate(camX, camY);
+    ctx.rotate(-simAngle * Math.PI/180);
+    ctx.strokeStyle = '#555';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(0, 0, camRadiusPx, 0, 2*Math.PI);
+    ctx.stroke();
+
+    // Cam reference radius line
+    ctx.strokeStyle = '#0077b5';
+    ctx.beginPath();
+    ctx.moveTo(0,0);
+    ctx.lineTo(camRadiusPx,0);
+    ctx.stroke();
+    ctx.restore();
+
+    // Draw follower guide
+    ctx.strokeStyle = '#444';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(followerX, margin);
+    ctx.lineTo(followerX, baseY);
+    ctx.stroke();
+
+    // Follower stem
+    ctx.beginPath();
+    ctx.moveTo(followerX, baseY);
+    ctx.lineTo(followerX, followerY);
+    ctx.stroke();
+
+    // Follower head
+    ctx.fillStyle = '#ff6f61';
+    ctx.beginPath();
+    ctx.arc(followerX, followerY, 8, 0, 2*Math.PI);
+    ctx.fill();
+
+    // Text: angle and stroke
+    ctx.fillStyle = '#000';
+    ctx.font = '12px Arial';
+    ctx.fillText(`Angle: ${simAngle.toFixed(1)}°`, margin, margin+10);
+    ctx.fillText(`Stroke: ${stroke.toFixed(2)} mm`, margin, margin+26);
+    ctx.fillText(`Cycle: ${cycleDuration.toFixed(2)} s`, margin, margin+42);
+}
+
+function simLoop(timestamp) {
+    if (!simRunning) return;
+
+    if (lastSimTime === null) lastSimTime = timestamp;
+    const dt = (timestamp - lastSimTime) / 1000; // s
+    lastSimTime = timestamp;
+
+    let omega;
+    if (cycleDuration > 0) {
+        omega = 360 / cycleDuration; // deg/s
+    } else {
+        omega = 60; // fallback
+    }
+    simAngle = (simAngle + omega * dt) % 360;
+
+    drawSimulation();
+    requestAnimationFrame(simLoop);
+}
+
+function startSimulation() {
+    if (simRunning) return;
+    simRunning = true;
+    lastSimTime = null;
+    requestAnimationFrame(simLoop);
+}
+
+function stopSimulation() {
+    simRunning = false;
+}
+
+/* ========= Event Listener ========= */
 document.getElementById('addMovementBtn').addEventListener('click', addMovement);
 document.getElementById('movementSelect').addEventListener('change', selectMovement);
 document.getElementById('addPointBtn').addEventListener('click', addOrUpdatePoint);
@@ -1030,9 +1262,15 @@ document.getElementById('importExcelBtn').addEventListener('click', () => docume
 document.getElementById('importExcelInput').addEventListener('change', e => importFromExcel(e.target.files[0]));
 document.getElementById('exportMacroBtn').addEventListener('click', exportFreeCADMacro);
 document.getElementById('exportSolidWorksBtn').addEventListener('click', exportSolidWorksMacroTXT);
-
+document.getElementById('startSimBtn').addEventListener('click', startSimulation);
+document.getElementById('stopSimBtn').addEventListener('click', stopSimulation);
+document.getElementById("toggleSmoothPreview").addEventListener("change", function () {
+    smoothPreviewDataset.hidden = !this.checked;
+    chart.update();
+});
 // --- Beim Start gespeicherte Daten laden ---
 loadData();
+drawSimulation(); // initial draw
 </script>
 </body>
 </html>
