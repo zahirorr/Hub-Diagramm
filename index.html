@@ -8,6 +8,7 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@2.2.1/dist/chartjs-plugin-annotation.min.js"></script>
 
+<!-- jsPDF + html2canvas for PDF export -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 
@@ -104,6 +105,7 @@
 
 <h3>Bewegungen ein-/ausblenden / Show/Hide Movements:</h3>
 <div id="toggleMovements"></div>
+
 <div class="form-group">
     <label>
         <input type="checkbox" id="toggleSmoothPreview" checked>
@@ -133,13 +135,28 @@
 <!-- Acceleration chart -->
 <canvas id="accChart" width="900" height="300"></canvas>
 
-<!-- Follower Simulation -->
-<h3>Follower Simulation / Mitnehmer-Animation</h3>
-<canvas id="simCanvas" width="400" height="220"></canvas>
-<div style="text-align:center; margin-bottom:20px;">
-    <button id="startSimBtn">▶ Start Simulation</button>
-    <button id="stopSimBtn">⏸ Stop Simulation</button>
+<!-- Follower Simulation (cam + follower, speed from cycle time) -->
+
+<!-- Separate follower stroke animation with speed slider -->
+<h3>Follower Animation (Angle-based)</h3>
+
+<div class="form-group">
+    <button id="playFollowerBtn">▶ Play</button>
+    <button id="pauseFollowerBtn">⏸ Pause</button>
+    <button id="resetFollowerBtn">⏹ Reset</button>
 </div>
+
+<div class="form-group">
+    <label for="simSpeed">Animation Speed:</label>
+    <input type="range" id="simSpeed" min="10" max="200" value="50" step="5">
+    <span id="simSpeedValue">50 ms/step</span>
+</div>
+
+<canvas id="followerCanvas"
+        width="500"
+        height="500"
+        style="background:white; border:1px solid #ccc; border-radius:6px; margin-top:10px;">
+</canvas>
 
 <div style="text-align:center; margin-top:20px;">
     <button id="exportPDFBtn">Alle Diagramme als A3 PDF speichern / Save all as A3 PDF</button>
@@ -156,7 +173,7 @@
 </div>
 
 <div class="footer-link">
-    Developed by Eng. Zaher Taleb | 
+    Developed by Eng. Zaher Taleb |
     <a href="https://www.youtube.com/@Zaher.Taleb.mechanical.design" target="_blank">🎥 Visit my YouTube Channel</a>
 </div>
 </div>
@@ -190,7 +207,7 @@ let smoothPreviewDataset = {
     tension: 0
 };
 
-// Follower simulation state
+// Follower simulation state (cycle-based simCanvas)
 let simRunning = false;
 let simAngle = 0;       // deg
 let lastSimTime = null;
@@ -217,7 +234,7 @@ const chart = new Chart(ctx, {
             x: { type: 'linear', min:0, max:360, ticks:{stepSize:10, callback:formatXAxisTick}, title:{display:true,text:'Winkel (°) & Zeit (ms) / Angle (°) & Time (ms)'} },
             y: { beginAtZero:true, title:{display:true,text:'Hub (mm) / Stroke (mm)'} }
         },
-        plugins: { 
+        plugins: {
             legend:{ display:true, position:'top' },
             annotation: { annotations: {} }
         }
@@ -278,6 +295,7 @@ function ensureSmoothDataset() {
         smoothPreviewDataset.hidden = !checkbox.checked;
     }
 }
+
 // --- Speicherfunktionen ---
 function saveData() {
     localStorage.setItem('movements', JSON.stringify(movements));
@@ -326,6 +344,7 @@ function loadData() {
             updateDerivedCharts();
             updateSmoothPreview();
             drawSimulation(); // initial static draw
+            drawFollower(0);  // initial follower view
         }
     }
 }
@@ -353,6 +372,7 @@ function addMovement() {
     updateDerivedCharts();
     updateSmoothPreview();
     drawSimulation();
+    drawFollower(0);
     saveData();
 }
 
@@ -375,6 +395,7 @@ function selectMovement(){
     updateDerivedCharts();
     updateSmoothPreview();
     drawSimulation();
+    drawFollower(0);
 }
 
 function formatXAxisTick(value){
@@ -427,7 +448,7 @@ function refreshSegmentTable(){
         const currentLaw = laws[i] || defaultLawId;
 
         const row = document.createElement('tr');
-        const options = motionLaws.map(l => 
+        const options = motionLaws.map(l =>
             `<option value="${l.id}" ${l.id===currentLaw?'selected':''}>${l.label}</option>`
         ).join('');
         row.innerHTML = `
@@ -452,6 +473,7 @@ function changeSegmentLaw(index, lawId){
     updateDerivedCharts();
     updateSmoothPreview();
     drawSimulation();
+    drawFollower(0);
 }
 
 // --- Punkt hinzufügen/ändern ---
@@ -464,11 +486,11 @@ function addOrUpdatePoint(){
         return;
     }
     const movement = movements[currentMovementIndex];
-    if(editingIndex!==null){ 
-        movement.points[editingIndex+1]={x,y}; 
-        editingIndex=null; 
-    } else { 
-        movement.points.push({x,y}); 
+    if(editingIndex!==null){
+        movement.points[editingIndex+1]={x,y};
+        editingIndex=null;
+    } else {
+        movement.points.push({x,y});
     }
 
     movement.points.sort((a,b)=>a.x-b.x);
@@ -490,6 +512,7 @@ function addOrUpdatePoint(){
     updateDerivedCharts();
     updateSmoothPreview();
     drawSimulation();
+    drawFollower(0);
     document.getElementById('xCoord').value='';
     document.getElementById('yCoord').value='';
     saveData();
@@ -514,6 +537,7 @@ function deletePoint(index){
     updateDerivedCharts();
     updateSmoothPreview();
     drawSimulation();
+    drawFollower(0);
     saveData();
 }
 
@@ -1070,6 +1094,7 @@ function clearAll() {
     velChart.update();
     accChart.update();
     drawSimulation();
+    drawFollower(0);
     alert("Alle Daten wurden gelöscht!");
 }
 
@@ -1118,105 +1143,11 @@ function importFromExcel(file) {
         updateDerivedCharts();
         updateSmoothPreview();
         drawSimulation();
+        drawFollower(0);
         saveData();
         alert("Daten erfolgreich importiert!");
     };
     reader.readAsArrayBuffer(file);
-}
-
-/* ========= Follower Simulation ========= */
-
-function drawSimulation() {
-    const canvas = document.getElementById('simCanvas');
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    ctx.clearRect(0,0,canvas.width,canvas.height);
-
-    if (currentMovementIndex === null || !movements[currentMovementIndex]) {
-        // nothing to draw
-        return;
-    }
-
-    const movement = movements[currentMovementIndex];
-    const pts = buildCleanPoints(movement);
-    rebuildSegmentLaws(movement);
-    if (pts.length < 2) return;
-
-    const params = getCamParameters();
-
-    // Stroke at current angle
-    const stroke = strokeAtAngle(simAngle, movement, pts); // mm
-
-    // Determine scale based on max stroke
-    const maxStroke = pts.reduce((m,p)=>Math.max(m,p.y),0) || 1;
-    const margin = 25;
-    const w = canvas.width;
-    const h = canvas.height;
-
-    const camX = 90;
-    const camY = h - margin - 40;
-    const camRadiusPx = 40;
-
-    const followerX = w - 120;
-    const baseY = h - margin;
-
-    const usableHeight = baseY - margin;
-    const scale = usableHeight / (maxStroke || 1);
-
-    const followerY = baseY - stroke * scale;
-
-    // Background ground line
-    ctx.strokeStyle = '#999';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(margin, baseY);
-    ctx.lineTo(w - margin, baseY);
-    ctx.stroke();
-
-    // Draw cam base circle
-    ctx.save();
-    ctx.translate(camX, camY);
-    ctx.rotate(-simAngle * Math.PI/180);
-    ctx.strokeStyle = '#555';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.arc(0, 0, camRadiusPx, 0, 2*Math.PI);
-    ctx.stroke();
-
-    // Cam reference radius line
-    ctx.strokeStyle = '#0077b5';
-    ctx.beginPath();
-    ctx.moveTo(0,0);
-    ctx.lineTo(camRadiusPx,0);
-    ctx.stroke();
-    ctx.restore();
-
-    // Draw follower guide
-    ctx.strokeStyle = '#444';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(followerX, margin);
-    ctx.lineTo(followerX, baseY);
-    ctx.stroke();
-
-    // Follower stem
-    ctx.beginPath();
-    ctx.moveTo(followerX, baseY);
-    ctx.lineTo(followerX, followerY);
-    ctx.stroke();
-
-    // Follower head
-    ctx.fillStyle = '#ff6f61';
-    ctx.beginPath();
-    ctx.arc(followerX, followerY, 8, 0, 2*Math.PI);
-    ctx.fill();
-
-    // Text: angle and stroke
-    ctx.fillStyle = '#000';
-    ctx.font = '12px Arial';
-    ctx.fillText(`Angle: ${simAngle.toFixed(1)}°`, margin, margin+10);
-    ctx.fillText(`Stroke: ${stroke.toFixed(2)} mm`, margin, margin+26);
-    ctx.fillText(`Cycle: ${cycleDuration.toFixed(2)} s`, margin, margin+42);
 }
 
 function simLoop(timestamp) {
@@ -1249,7 +1180,117 @@ function stopSimulation() {
     simRunning = false;
 }
 
-/* ========= Event Listener ========= */
+/* ========= Follower Animation System (angle-based, own canvas + speed slider) ========= */
+let followerAngle = 0;
+let followerPlaying = false;
+let followerInterval = null;
+let followerSpeedMs = 50; // default speed from slider
+
+const followerCanvas = document.getElementById("followerCanvas");
+const followerCtx = followerCanvas.getContext("2d");
+
+function drawFollower(angleDeg) {
+    if (!followerCtx) return;
+
+    const movement = movements[currentMovementIndex];
+    if (!movement) return;
+
+    const pts = buildCleanPoints(movement);
+    if (pts.length < 2) return;
+    const lift = strokeAtAngle(angleDeg, movement, pts);  // mm
+
+    // Canvas center
+    const centerX = followerCanvas.width / 2;
+    const centerY = followerCanvas.height / 2 + 80; // little lower
+
+    followerCtx.clearRect(0, 0, followerCanvas.width, followerCanvas.height);
+
+    // Draw cam base circle just for reference
+    followerCtx.beginPath();
+    followerCtx.strokeStyle = "#444";
+    followerCtx.lineWidth = 2;
+    followerCtx.arc(centerX - 120, centerY, 60, 0, Math.PI * 2);
+    followerCtx.stroke();
+
+    // Draw follower guide
+    followerCtx.beginPath();
+    followerCtx.strokeStyle = "#666";
+    followerCtx.lineWidth = 2;
+    followerCtx.moveTo(centerX, centerY - 180);
+    followerCtx.lineTo(centerX, centerY + 20);
+    followerCtx.stroke();
+
+    // Scale lift to pixels
+    const scale = 3; // 1 mm = 3 px (for example)
+    const followerY = centerY - lift * scale;
+
+    // Follower rod
+    followerCtx.beginPath();
+    followerCtx.strokeStyle = "red";
+    followerCtx.lineWidth = 4;
+    followerCtx.moveTo(centerX, centerY + 20);
+    followerCtx.lineTo(centerX, followerY);
+    followerCtx.stroke();
+
+    // Follower head
+    followerCtx.beginPath();
+    followerCtx.fillStyle = "blue";
+    followerCtx.arc(centerX, followerY, 8, 0, Math.PI * 2);
+    followerCtx.fill();
+
+    // Text info
+    followerCtx.fillStyle = "#000";
+    followerCtx.font = "14px Arial";
+    followerCtx.fillText(`Angle: ${angleDeg.toFixed(1)}°`, 20, 30);
+    followerCtx.fillText(`Lift: ${lift.toFixed(2)} mm`, 20, 50);
+}
+
+function stepFollower() {
+    followerAngle += 2; // degrees per frame
+    if (followerAngle > 360) followerAngle = 0;
+    drawFollower(followerAngle);
+}
+
+function startFollower() {
+    if (followerInterval) return;
+    followerPlaying = true;
+    followerInterval = setInterval(stepFollower, followerSpeedMs);
+}
+
+function pauseFollower() {
+    followerPlaying = false;
+    if (followerInterval) {
+        clearInterval(followerInterval);
+        followerInterval = null;
+    }
+}
+
+function resetFollower() {
+    pauseFollower();
+    followerAngle = 0;
+    drawFollower(0);
+}
+
+// Speed slider
+const simSpeedInput = document.getElementById("simSpeed");
+const simSpeedValue = document.getElementById("simSpeedValue");
+
+simSpeedInput.addEventListener("input", () => {
+    followerSpeedMs = parseInt(simSpeedInput.value, 10);
+    simSpeedValue.textContent = followerSpeedMs + " ms/step";
+
+    if (followerInterval) {
+        clearInterval(followerInterval);
+        followerInterval = setInterval(stepFollower, followerSpeedMs);
+    }
+});
+
+// Button bindings for follower animation
+document.getElementById("playFollowerBtn").addEventListener("click", startFollower);
+document.getElementById("pauseFollowerBtn").addEventListener("click", pauseFollower);
+document.getElementById("resetFollowerBtn").addEventListener("click", resetFollower);
+
+/* ========= Event Listener for main UI ========= */
 document.getElementById('addMovementBtn').addEventListener('click', addMovement);
 document.getElementById('movementSelect').addEventListener('change', selectMovement);
 document.getElementById('addPointBtn').addEventListener('click', addOrUpdatePoint);
@@ -1262,15 +1303,16 @@ document.getElementById('importExcelBtn').addEventListener('click', () => docume
 document.getElementById('importExcelInput').addEventListener('change', e => importFromExcel(e.target.files[0]));
 document.getElementById('exportMacroBtn').addEventListener('click', exportFreeCADMacro);
 document.getElementById('exportSolidWorksBtn').addEventListener('click', exportSolidWorksMacroTXT);
-document.getElementById('startSimBtn').addEventListener('click', startSimulation);
-document.getElementById('stopSimBtn').addEventListener('click', stopSimulation);
+
 document.getElementById("toggleSmoothPreview").addEventListener("change", function () {
     smoothPreviewDataset.hidden = !this.checked;
     chart.update();
 });
+
 // --- Beim Start gespeicherte Daten laden ---
 loadData();
 drawSimulation(); // initial draw
+drawFollower(0);  // initial follower view
 </script>
 </body>
 </html>
