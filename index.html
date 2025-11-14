@@ -103,7 +103,7 @@
     <button id="clearAllBtn" style="background:#ff5555;">🧹 Alles löschen</button>
 </div>
 
-<!-- Neue Reihe: FreeCAD Makro Export -->
+<!-- FreeCAD Makro Export -->
 <div style="text-align:center; margin-top:10px;">
     <button id="exportMacroBtn">🧩 FreeCAD Makro (.FCMacro)</button>
 </div>
@@ -121,10 +121,10 @@ Chart.register(window['chartjs-plugin-annotation']);
 const colors = ['#0077b5','#ff6f61','#6a5acd','#ffa500','#2e8b57','#ff1493','#20b2aa','#8b4513'];
 const motionLaws = [
     {id:'smoothstep', label:'Smoothstep 3-2'},
-    {id:'linear', label:'Linear'},
-    {id:'shm', label:'SHM (Harmonic)'},
-    {id:'cycloidal', label:'Cycloidal'},
-    {id:'poly345', label:'3-4-5 Polynomial'}
+    {id:'linear',     label:'Linear'},
+    {id:'shm',        label:'SHM (Harmonic)'},
+    {id:'cycloidal',  label:'Cycloidal'},
+    {id:'poly345',    label:'3-4-5 Polynomial'}
 ];
 const defaultLawId = 'smoothstep';
 
@@ -177,7 +177,7 @@ const velChart = new Chart(velCtx, {
     options: {
         scales: {
             x: { type:'linear', min:0, max:360, title:{display:true, text:'Winkel (°) / Angle'} },
-            y: { title:{display:true, text:'Geschwindigkeit (mm/s)'} }
+            y: { title:{display:true, text:'Geschwindigkeit (m/s) / Velocity (m/s)'} }
         },
         plugins:{ legend:{display:false} }
     }
@@ -189,7 +189,7 @@ const accChart = new Chart(accCtx, {
     options: {
         scales: {
             x: { type:'linear', min:0, max:360, title:{display:true, text:'Winkel (°) / Angle'} },
-            y: { title:{display:true, text:'Beschleunigung (mm/s²)'} }
+            y: { title:{display:true, text:'Beschleunigung (m/s²) / Acceleration (m/s²)'} }
         },
         plugins:{ legend:{display:false} }
     }
@@ -218,7 +218,6 @@ function loadData() {
 
     if (savedMovements) {
         movements = JSON.parse(savedMovements);
-        // restore defaults for older saved data
         movements.forEach(m=>{
             if (!m.points) m.points = [];
             if (!m.dataset) {
@@ -378,7 +377,6 @@ function addOrUpdatePoint(){
         movement.points.push({x,y}); 
     }
 
-    // sort & dedupe
     movement.points.sort((a,b)=>a.x-b.x);
     const clean = [];
     let lastX = null;
@@ -447,14 +445,51 @@ function toggleMovement(index, visible){
 function exportPDF(){
     const { jsPDF } = window.jspdf;
     const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a3' });
-    const canvas = document.getElementById('myChart');
-    const imgData = canvas.toDataURL('image/png', 1.0);
-    const pageWidth = pdf.internal.pageSize.getWidth();
+
+    const pageWidth  = pdf.internal.pageSize.getWidth();
     const pageHeight = pdf.internal.pageSize.getHeight();
-    const margin = 15;
-    const pdfWidth = pageWidth - 2*margin;
-    const pdfHeight = pageHeight - 2*margin;
-    pdf.addImage(imgData, 'PNG', margin, margin, pdfWidth, pdfHeight);
+    const margin     = 15;           // 15 mm all around (Option 1)
+    const gap        = 5;            // vertical gap between diagrams (mm)
+
+    const pdfWidth   = pageWidth  - 2 * margin;
+    const pdfHeight  = pageHeight - 2 * margin;
+
+    // 3 Slots (Stroke, Velocity, Acceleration)
+    const slotHeight = (pdfHeight - 2 * gap) / 3;
+
+    // Our three canvases
+    const canvases = [
+        document.getElementById('myChart'),   // Stroke
+        document.getElementById('velChart'),  // Velocity
+        document.getElementById('accChart')   // Acceleration
+    ];
+
+    canvases.forEach((canvas, index) => {
+        if (!canvas) return;
+
+        const imgData = canvas.toDataURL('image/png', 1.0);
+
+        // Original canvas aspect ratio
+        const cWidth  = canvas.width;
+        const cHeight = canvas.height;
+        const aspect  = cWidth / cHeight;
+
+        // Fit into slot while keeping aspect ratio
+        let drawWidth  = pdfWidth;
+        let drawHeight = drawWidth / aspect;
+
+        if (drawHeight > slotHeight) {
+            drawHeight = slotHeight;
+            drawWidth  = slotHeight * aspect;
+        }
+
+        const x = margin + (pdfWidth - drawWidth) / 2;   // center horizontally
+        const y = margin + index * (slotHeight + gap) + (slotHeight - drawHeight) / 2;
+
+        pdf.addImage(imgData, 'PNG', x, y, drawWidth, drawHeight);
+    });
+
+    // Footer (like before)
     const footerText = "Developed by Eng. Zaher Taleb | Visit my YouTube Channel";
     const linkURL = "https://www.youtube.com/@Zaher.Taleb.mechanical.design";
     pdf.setFontSize(12);
@@ -463,7 +498,8 @@ function exportPDF(){
     const yPos = pageHeight - 10;
     pdf.text(footerText, xPos, yPos);
     pdf.link(xPos, yPos - 5, textWidth, 10, { url: linkURL });
-    pdf.save('Hub_Diagram_A3.pdf');
+
+    pdf.save('Cam_Diagrams_A3.pdf');
 }
 
 // --- Vertikale Linie ---
@@ -518,7 +554,7 @@ function interpSegment(angle, a1, a2, y1, y2, lawId){
         case 'linear':
             s = t;
             break;
-        case 'shm': // simple harmonic
+        case 'shm':
             s = (1 - Math.cos(Math.PI * t)) / 2;
             break;
         case 'cycloidal':
@@ -576,7 +612,7 @@ function updateDerivedCharts() {
         return;
     }
 
-    const stepDeg = 1; // 1° resolution
+    const stepDeg = 1;
     const angles = [];
     const y = [];
 
@@ -586,7 +622,7 @@ function updateDerivedCharts() {
     }
 
     const n = angles.length;
-    const dy_dphi = new Array(n).fill(0); // dy/dφ [mm/deg]
+    const dy_dphi = new Array(n).fill(0);
 
     for (let i = 1; i < n-1; i++) {
         dy_dphi[i] = (y[i+1] - y[i-1]) / (2*stepDeg);
@@ -594,27 +630,28 @@ function updateDerivedCharts() {
     dy_dphi[0] = (y[1] - y[0]) / stepDeg;
     dy_dphi[n-1] = (y[n-1] - y[n-2]) / stepDeg;
 
-    let vel = new Array(n).fill(0);
-    let acc = new Array(n).fill(0);
+    let vel = new Array(n).fill(0);  // mm/s
+    let acc = new Array(n).fill(0);  // mm/s²
 
     if (cycleDuration > 0) {
-        const omega = 360 / cycleDuration;              // deg/s
-        const dt = cycleDuration * stepDeg / 360.0;     // s per step
+        const omega = 360 / cycleDuration;        // deg/s
+        const dt = cycleDuration * stepDeg / 360; // s per step
 
         for (let i=0; i<n; i++) {
-            vel[i] = dy_dphi[i] * omega;                // mm/s
+            vel[i] = dy_dphi[i] * omega;          // mm/s
         }
 
         for (let i=1; i<n-1; i++) {
-            acc[i] = (vel[i+1] - vel[i-1]) / (2*dt);    // mm/s²
+            acc[i] = (vel[i+1] - vel[i-1]) / (2*dt); // mm/s²
         }
         acc[0] = (vel[1] - vel[0]) / dt;
         acc[n-1] = (vel[n-1] - vel[n-2]) / dt;
     }
 
+    // Convert to SI units for display: mm/s → m/s, mm/s² → m/s²
     velChart.data.datasets = [{
         label: 'Geschwindigkeit',
-        data: angles.map((a,i)=>({x:a,y:vel[i]})),
+        data: angles.map((a,i)=>({x:a,y:vel[i]/1000})),        // m/s
         borderColor: '#2e8b57',
         fill:false,
         tension:0.2
@@ -622,7 +659,7 @@ function updateDerivedCharts() {
 
     accChart.data.datasets = [{
         label: 'Beschleunigung',
-        data: angles.map((a,i)=>({x:a,y:acc[i]})),
+        data: angles.map((a,i)=>({x:a,y:acc[i]/1000})),        // m/s²
         borderColor: '#ff0000',
         fill:false,
         tension:0.2
@@ -632,7 +669,7 @@ function updateDerivedCharts() {
     accChart.update();
 }
 
-/* ========= FreeCAD Macro Export (Cam, per-segment laws) ========= */
+/* ========= FreeCAD Macro Export – BSpline Approximation (Tol3D = 0.1) ========= */
 function exportFreeCADMacro() {
     if (currentMovementIndex === null) {
         alert("Bitte zuerst eine Bewegung auswählen.");
@@ -692,7 +729,7 @@ segment_laws = [
 ${pyLaws}
 ]
 
-# sort and remove duplicate angles
+# sort & remove duplicate angles
 motion_points = sorted(motion_points, key=lambda p: p[0])
 clean = []
 last = None
@@ -732,28 +769,44 @@ def lift_at(a):
         a1, y1 = motion_points[i]
         a2, y2 = motion_points[i+1]
         if a1 <= a <= a2:
-            if i < len(segment_laws):
-                law = segment_laws[i]
-            else:
-                law = "smoothstep"
+            law = segment_laws[i] if i < len(segment_laws) else "smoothstep"
             return interp_segment(a, a1, a2, y1, y2, law)
     return motion_points[-1][1]
 
+# sample polar cam points
 points = []
-a = 0.0
-while a <= 360.0:
-    L = lift_at(a)
+ang = 0.0
+while ang <= 360.0:
+    L = lift_at(ang)
     r = base_radius + L
-    t = math.radians(-(a + angle_offset))
-    x = r * math.cos(t)
-    y = r * math.sin(t)
+    th = math.radians(-(ang + angle_offset))
+    x = r * math.cos(th)
+    y = r * math.sin(th)
     points.append(App.Vector(x, y, 0))
-    a += step_angle
+    ang += step_angle
 
-points.append(points[0])
+# ensure closure for approximation
+if (points[0] - points[-1]).Length > 1e-6:
+    points.append(points[0])
 
-wire = Part.makePolygon(points)
-face = Part.Face(wire)
+# build smooth B-spline approximation (DegMax=3, Tol3D=0.1)
+curve = Part.BSplineCurve()
+try:
+    curve.approximate(points, DegMax=3, Tol3D=0.1)
+except Exception as e:
+    print("BSpline approximate failed:", e)
+    print("Falling back to interpolate...")
+    curve.interpolate(points, False)
+
+edge = curve.toShape()
+wire = Part.Wire(edge)
+
+try:
+    face = Part.Face(wire)
+except:
+    wire = wire.fix(0.1, 0.1, 0.1)
+    face = Part.Face(wire)
+
 solid = face.extrude(App.Vector(0,0,cam_thickness))
 
 doc = App.newDocument("CamProfile")
@@ -761,7 +814,7 @@ obj = doc.addObject("Part::Feature", "CamSolid")
 obj.Shape = solid
 doc.recompute()
 
-print("Cam created successfully with", len(points), "points.")
+print("Cam created successfully with BSpline approximation.")
 `;
 
     const blob = new Blob([macro], { type: "text/plain" });
@@ -770,8 +823,6 @@ print("Cam created successfully with", len(points), "points.")
     aLink.download = (movement.name || "GenerateCam") + ".FCMacro";
     aLink.click();
 }
-
-// --- NEUE FUNKTIONEN ---
 
 // 🧹 Alles löschen
 function clearAll() {
