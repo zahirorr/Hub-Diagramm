@@ -103,9 +103,10 @@
     <button id="clearAllBtn" style="background:#ff5555;">🧹 Alles löschen</button>
 </div>
 
-<!-- FreeCAD Makro Export -->
+<!-- CAD Makro Export -->
 <div style="text-align:center; margin-top:10px;">
     <button id="exportMacroBtn">🧩 FreeCAD Makro (.FCMacro)</button>
+    <button id="exportSolidWorksBtn">🟦 Export SolidWorks Macro (.swp)</button>
 </div>
 
 <div class="footer-link">
@@ -441,55 +442,18 @@ function toggleMovement(index, visible){
     saveData();
 }
 
-// --- PDF Export ---
+// --- PDF Export (nur Hubdiagramm) ---
 function exportPDF(){
     const { jsPDF } = window.jspdf;
     const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a3' });
-
-    const pageWidth  = pdf.internal.pageSize.getWidth();
+    const canvas = document.getElementById('myChart');
+    const imgData = canvas.toDataURL('image/png', 1.0);
+    const pageWidth = pdf.internal.pageSize.getWidth();
     const pageHeight = pdf.internal.pageSize.getHeight();
-    const margin     = 15;           // 15 mm all around (Option 1)
-    const gap        = 5;            // vertical gap between diagrams (mm)
-
-    const pdfWidth   = pageWidth  - 2 * margin;
-    const pdfHeight  = pageHeight - 2 * margin;
-
-    // 3 Slots (Stroke, Velocity, Acceleration)
-    const slotHeight = (pdfHeight - 2 * gap) / 3;
-
-    // Our three canvases
-    const canvases = [
-        document.getElementById('myChart'),   // Stroke
-        document.getElementById('velChart'),  // Velocity
-        document.getElementById('accChart')   // Acceleration
-    ];
-
-    canvases.forEach((canvas, index) => {
-        if (!canvas) return;
-
-        const imgData = canvas.toDataURL('image/png', 1.0);
-
-        // Original canvas aspect ratio
-        const cWidth  = canvas.width;
-        const cHeight = canvas.height;
-        const aspect  = cWidth / cHeight;
-
-        // Fit into slot while keeping aspect ratio
-        let drawWidth  = pdfWidth;
-        let drawHeight = drawWidth / aspect;
-
-        if (drawHeight > slotHeight) {
-            drawHeight = slotHeight;
-            drawWidth  = slotHeight * aspect;
-        }
-
-        const x = margin + (pdfWidth - drawWidth) / 2;   // center horizontally
-        const y = margin + index * (slotHeight + gap) + (slotHeight - drawHeight) / 2;
-
-        pdf.addImage(imgData, 'PNG', x, y, drawWidth, drawHeight);
-    });
-
-    // Footer (like before)
+    const margin = 15;
+    const pdfWidth = pageWidth - 2*margin;
+    const pdfHeight = pageHeight - 2*margin;
+    pdf.addImage(imgData, 'PNG', margin, margin, pdfWidth, pdfHeight);
     const footerText = "Developed by Eng. Zaher Taleb | Visit my YouTube Channel";
     const linkURL = "https://www.youtube.com/@Zaher.Taleb.mechanical.design";
     pdf.setFontSize(12);
@@ -498,8 +462,7 @@ function exportPDF(){
     const yPos = pageHeight - 10;
     pdf.text(footerText, xPos, yPos);
     pdf.link(xPos, yPos - 5, textWidth, 10, { url: linkURL });
-
-    pdf.save('Cam_Diagrams_A3.pdf');
+    pdf.save('Hub_Diagram_A3.pdf');
 }
 
 // --- Vertikale Linie ---
@@ -654,7 +617,7 @@ function updateDerivedCharts() {
         data: angles.map((a,i)=>({x:a,y:vel[i]/1000})),        // m/s
         borderColor: '#2e8b57',
         fill:false,
-        tension:0.2
+        tension:0
     }];
 
     accChart.data.datasets = [{
@@ -662,14 +625,14 @@ function updateDerivedCharts() {
         data: angles.map((a,i)=>({x:a,y:acc[i]/1000})),        // m/s²
         borderColor: '#ff0000',
         fill:false,
-        tension:0.2
+        tension:0
     }];
 
     velChart.update();
     accChart.update();
 }
 
-/* ========= FreeCAD Macro Export – BSpline Approximation (Tol3D = 0.1) ========= */
+/* ========= FreeCAD Macro Export – BSpline Approximation ========= */
 function exportFreeCADMacro() {
     if (currentMovementIndex === null) {
         alert("Bitte zuerst eine Bewegung auswählen.");
@@ -686,11 +649,9 @@ function exportFreeCADMacro() {
         return;
     }
 
-    // ensure 0° and 360° exist
     if (pts[0].x > 0) pts.unshift({x:0, y:pts[0].y});
     if (pts[pts.length-1].x < 360) pts.push({x:360, y:pts[pts.length-1].y});
 
-    // build segment law list aligned with pts segments
     const exportLaws = [];
     const origPts = buildCleanPoints(movement);
     const origLaws = laws;
@@ -729,7 +690,6 @@ segment_laws = [
 ${pyLaws}
 ]
 
-# sort & remove duplicate angles
 motion_points = sorted(motion_points, key=lambda p: p[0])
 clean = []
 last = None
@@ -739,7 +699,6 @@ for a, y in motion_points:
         last = a
 motion_points = clean
 
-# ensure 0° and 360° exist
 if motion_points[0][0] > 0:
     motion_points.insert(0, [0, motion_points[0][1]])
 if motion_points[-1][0] < 360:
@@ -760,7 +719,7 @@ def interp_segment(a, a1, a2, y1, y2, law):
         s = t - (1.0/(2.0*math.pi)) * math.sin(2.0*math.pi*t)
     elif law == "poly345":
         s = 10*t**3 - 15*t**4 + 6*t**5
-    else:  # smoothstep
+    else:
         s = 3*t*t - 2*t*t*t
     return y1 + (y2 - y1) * s
 
@@ -773,7 +732,6 @@ def lift_at(a):
             return interp_segment(a, a1, a2, y1, y2, law)
     return motion_points[-1][1]
 
-# sample polar cam points
 points = []
 ang = 0.0
 while ang <= 360.0:
@@ -785,11 +743,9 @@ while ang <= 360.0:
     points.append(App.Vector(x, y, 0))
     ang += step_angle
 
-# ensure closure for approximation
 if (points[0] - points[-1]).Length > 1e-6:
     points.append(points[0])
 
-# build smooth B-spline approximation (DegMax=3, Tol3D=0.1)
 curve = Part.BSplineCurve()
 try:
     curve.approximate(points, DegMax=3, Tol3D=0.1)
@@ -824,6 +780,106 @@ print("Cam created successfully with BSpline approximation.")
     aLink.click();
 }
 
+/* ========= SolidWorks Macro Export – VBA Sketch Spline ========= */
+/* ========= SolidWorks Macro Export – FIXED (Units in meters) ========= */
+function exportSolidWorksMacro() {
+    if (currentMovementIndex === null) {
+        alert("Please select a movement first.");
+        return;
+    }
+
+    const movement = movements[currentMovementIndex];
+    let pts = buildCleanPoints(movement);
+    rebuildSegmentLaws(movement);
+
+    if (pts.length < 2) {
+        alert("Not enough points to export a SolidWorks macro.");
+        return;
+    }
+
+    // Ensure 0° and 360° exist
+    if (pts[0].x > 0) pts.unshift({x:0, y:pts[0].y});
+    if (pts[pts.length-1].x < 360) pts.push({x:360, y:pts[pts.length-1].y});
+
+    // Sample points every 0.5°
+    const step = 0.5;
+    const samplePts = [];
+    const baseRadius = 125;   // mm
+
+    for (let a = 0; a <= 360; a += step) {
+        const L = strokeAtAngle(a, movement, pts);     // lift in mm
+        const radiusMm = baseRadius + L;               // mm
+        const radiusM = radiusMm / 1000;               // convert to meters
+
+        const th = -(a + 180) * Math.PI / 180;
+        const x = radiusM * Math.cos(th);
+        const y = radiusM * Math.sin(th);
+
+        samplePts.push({x, y});
+    }
+
+    // Build VB arrays
+    const n = samplePts.length - 1;
+    let vbX = "", vbY = "", vbZ = "";
+
+    for (let i = 0; i <= n; i++) {
+        vbX += `    xArr(${i}) = ${samplePts[i].x.toFixed(6)}\n`;
+        vbY += `    yArr(${i}) = ${samplePts[i].y.toFixed(6)}\n`;
+        vbZ += `    zArr(${i}) = 0#\n`;
+    }
+
+    const swMacro =
+`Option Explicit
+
+Dim swApp As SldWorks.SldWorks
+Dim swModel As SldWorks.ModelDoc2
+Dim swSketchMgr As SldWorks.SketchManager
+
+Sub main()
+
+    Set swApp = Application.SldWorks
+    Set swModel = swApp.NewPart
+    Set swSketchMgr = swModel.SketchManager
+
+    ' Start a sketch on Front Plane
+    swSketchMgr.InsertSketch True
+
+    Dim xArr(${n}) As Double
+    Dim yArr(${n}) As Double
+    Dim zArr(${n}) As Double
+
+${vbX}
+${vbY}
+${vbZ}
+
+    ' Build flattened point array: (x1, y1, z1, x2, y2, z2, ...)
+    Dim pts((${n}+1)*3 - 1) As Double
+    Dim k As Long
+    k = 0
+    
+    Dim i As Long
+    For i = 0 To ${n}
+        pts(k) = xArr(i): k = k + 1
+        pts(k) = yArr(i): k = k + 1
+        pts(k) = zArr(i): k = k + 1
+    Next i
+
+    Dim swSpline As SldWorks.SketchSpline
+    Set swSpline = swSketchMgr.CreateSpline(pts)
+
+    swSketchMgr.InsertSketch True
+
+    MsgBox "SolidWorks cam created successfully!", vbInformation
+
+End Sub
+`;
+
+    const blob = new Blob([swMacro], { type: "text/plain" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = (movement.name || "CamProfile") + ".txt";
+    a.click();
+}
 // 🧹 Alles löschen
 function clearAll() {
     if (!confirm("Bist du sicher, dass du alle Daten löschen willst?")) return;
@@ -901,6 +957,7 @@ document.getElementById('exportExcelBtn').addEventListener('click', exportToExce
 document.getElementById('importExcelBtn').addEventListener('click', () => document.getElementById('importExcelInput').click());
 document.getElementById('importExcelInput').addEventListener('change', e => importFromExcel(e.target.files[0]));
 document.getElementById('exportMacroBtn').addEventListener('click', exportFreeCADMacro);
+document.getElementById('exportSolidWorksBtn').addEventListener('click', exportSolidWorksMacro);
 
 // --- Beim Start gespeicherte Daten laden ---
 loadData();
