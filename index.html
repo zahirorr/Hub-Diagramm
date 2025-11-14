@@ -873,7 +873,6 @@ function exportSolidWorksMacroTXT() {
     const params = getCamParameters();
     const baseRadius = params.baseRadius;   // mm
     const angleOffset = params.angleOffset; // deg
-    const holeDiameter = params.holeDiameter; // mm
 
     // Ensure 0° and 360°
     if (pts[0].x > 0) pts.unshift({x: 0, y: pts[0].y});
@@ -898,13 +897,12 @@ function exportSolidWorksMacroTXT() {
     let vbaZ = "";
 
     for (let i = 0; i < samplePts.length; i++) {
-        vbaX += `    xArr(${i}) = ${samplePts[i].x.toFixed(6)}\\n`;
-        vbaY += `    yArr(${i}) = ${samplePts[i].y.toFixed(6)}\\n`;
-        vbaZ += `    zArr(${i}) = 0#\\n`;
+        vbaX += `    xArr(${i}) = ${samplePts[i].x.toFixed(6)}\n`;
+        vbaY += `    yArr(${i}) = ${samplePts[i].y.toFixed(6)}\n`;
+        vbaZ += `    zArr(${i}) = 0#\n`;
     }
 
     const count = samplePts.length - 1;
-    const holeDiamM = holeDiameter > 0 ? (holeDiameter / 1000.0) : 0.0;
 
     const macroText =
 `Option Explicit
@@ -942,13 +940,6 @@ ${vbaZ}
     Dim swSpline As SldWorks.SketchSpline
     Set swSpline = swSketchMgr.CreateSpline(pts)
 
-    ' Create center hole if diameter > 0
-    Dim holeDiam As Double
-    holeDiam = ${holeDiamM}
-    If holeDiam > 0# Then
-        swSketchMgr.CreateCircleByRadius 0#, 0#, 0#, holeDiam / 2#
-    End If
-
     swSketchMgr.InsertSketch True
 
     MsgBox "SolidWorks cam created successfully!", vbInformation
@@ -961,9 +952,7 @@ End Sub
     aLink.href = URL.createObjectURL(blob);
     aLink.download = (movement.name || "CamProfile") + "_SolidWorksMacro.txt";
     aLink.click();
-}
-
-// 🧹 Alles löschen
+}// 🧹 Alles löschen
 function clearAll() {
     if (!confirm("Bist du sicher, dass du alle Daten löschen willst?")) return;
     localStorage.clear();
