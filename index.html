@@ -80,6 +80,14 @@
     <tbody></tbody>
 </table>
 
+<h3>Bewegungsgesetze pro Segment / Motion laws per segment:</h3>
+<table id="segmentTable">
+    <thead>
+        <tr><th>#</th><th>Von (°)</th><th>Bis (°)</th><th>Gesetz / Law</th></tr>
+    </thead>
+    <tbody></tbody>
+</table>
+
 <!-- Hub / Stroke chart -->
 <canvas id="myChart" width="900" height="400"></canvas>
 <!-- Velocity chart -->
@@ -111,6 +119,15 @@
 Chart.register(window['chartjs-plugin-annotation']);
 
 const colors = ['#0077b5','#ff6f61','#6a5acd','#ffa500','#2e8b57','#ff1493','#20b2aa','#8b4513'];
+const motionLaws = [
+    {id:'smoothstep', label:'Smoothstep 3-2'},
+    {id:'linear', label:'Linear'},
+    {id:'shm', label:'SHM (Harmonic)'},
+    {id:'cycloidal', label:'Cycloidal'},
+    {id:'poly345', label:'3-4-5 Polynomial'}
+];
+const defaultLawId = 'smoothstep';
+
 let movements = [];
 let currentMovementIndex = null;
 let editingIndex = null;
@@ -184,12 +201,33 @@ function saveData() {
     localStorage.setItem('cycleDuration', cycleDuration);
 }
 
+function rebuildSegmentLaws(movement){
+    if (!movement.segmentLaws) movement.segmentLaws = [];
+    const segCount = Math.max((movement.points?.length || 0) - 1, 0);
+    const old = movement.segmentLaws;
+    const neu = [];
+    for (let i=0; i<segCount; i++){
+        neu[i] = old[i] || defaultLawId;
+    }
+    movement.segmentLaws = neu;
+}
+
 function loadData() {
     const savedMovements = localStorage.getItem('movements');
     const savedCycleDuration = localStorage.getItem('cycleDuration');
 
     if (savedMovements) {
         movements = JSON.parse(savedMovements);
+        // restore defaults for older saved data
+        movements.forEach(m=>{
+            if (!m.points) m.points = [];
+            if (!m.dataset) {
+                const color = colors[Math.floor(Math.random()*colors.length)];
+                m.dataset = { label:m.name, data:m.points, borderColor:color, fill:false, tension:0 };
+            }
+            rebuildSegmentLaws(m);
+        });
+
         cycleDuration = parseFloat(savedCycleDuration) || 1;
         document.getElementById('cycleDuration').value = cycleDuration;
 
@@ -201,25 +239,31 @@ function loadData() {
         if (movements.length > 0) {
             currentMovementIndex = 0;
             refreshTable();
+            refreshSegmentTable();
             updateDerivedCharts();
         }
     }
 }
 
-// --- Funktionen ---
+// --- Grundfunktionen ---
 function addMovement() {
     const name = document.getElementById('movementName').value.trim();
     if(!name){ alert('Bitte einen Namen eingeben / Please enter a name.'); return;}
     const color = colors[movements.length % colors.length];
     const dataset = { label: name, data: [{x:0,y:0}], borderColor: color, fill:false, tension:0 };
-    movements.push({name, dataset, points:[{x:0,y:0}], visible:true});
+    const movement = {name, dataset, points:[{x:0,y:0}], visible:true, segmentLaws:[]};
+    rebuildSegmentLaws(movement);
+
+    movements.push(movement);
     chart.data.datasets.push(dataset);
     chart.update();
     document.getElementById('movementName').value='';
+    currentMovementIndex = movements.length-1;
+
     updateMovementSelect();
     updateToggleMovements();
-    currentMovementIndex = movements.length-1;
     refreshTable();
+    refreshSegmentTable();
     updateDerivedCharts();
     saveData();
 }
@@ -239,6 +283,7 @@ function selectMovement(){
     currentMovementIndex=parseInt(select.value);
     editingIndex=null;
     refreshTable();
+    refreshSegmentTable();
     updateDerivedCharts();
 }
 
@@ -256,6 +301,7 @@ function updateCycleDuration(){
     saveData();
 }
 
+// --- Tabellen für Punkte & Segmente ---
 function refreshTable(){
     const tbody = document.querySelector('#pointsTable tbody');
     tbody.innerHTML = '';
@@ -263,30 +309,59 @@ function refreshTable(){
     const movement = movements[currentMovementIndex];
     movement.points.slice(1).forEach((point, index) => {
         const row = document.createElement('tr');
-        const tdIndex = document.createElement('td'); tdIndex.textContent = index + 1;
-        const tdX = document.createElement('td'); tdX.textContent = point.x;
-        const tdY = document.createElement('td'); tdY.textContent = point.y;
-        const tdActions = document.createElement('td');
-
-        const btnEdit = document.createElement('button');
-        btnEdit.textContent = 'Bearbeiten / Change';
-        btnEdit.addEventListener('click', () => editPoint(index));
-
-        const btnDelete = document.createElement('button');
-        btnDelete.textContent = 'Löschen / Delete';
-        btnDelete.addEventListener('click', () => deletePoint(index));
-
-        tdActions.appendChild(btnEdit);
-        tdActions.appendChild(btnDelete);
-
-        row.appendChild(tdIndex);
-        row.appendChild(tdX);
-        row.appendChild(tdY);
-        row.appendChild(tdActions);
+        row.innerHTML = `
+            <td>${index+1}</td>
+            <td>${point.x}</td>
+            <td>${point.y}</td>
+            <td>
+                <button onclick="editPoint(${index})">Bearbeiten / Change</button>
+                <button onclick="deletePoint(${index})">Löschen / Delete</button>
+            </td>`;
         tbody.appendChild(row);
     });
 }
 
+function refreshSegmentTable(){
+    const tbody = document.querySelector('#segmentTable tbody');
+    tbody.innerHTML = '';
+    if(currentMovementIndex===null) return;
+    const movement = movements[currentMovementIndex];
+    const pts = buildCleanPoints(movement);
+    rebuildSegmentLaws(movement);
+    const laws = movement.segmentLaws || [];
+
+    for (let i=0; i<pts.length-1; i++){
+        const a1 = pts[i].x;
+        const a2 = pts[i+1].x;
+        const currentLaw = laws[i] || defaultLawId;
+
+        const row = document.createElement('tr');
+        const options = motionLaws.map(l => 
+            `<option value="${l.id}" ${l.id===currentLaw?'selected':''}>${l.label}</option>`
+        ).join('');
+        row.innerHTML = `
+            <td>${i+1}</td>
+            <td>${a1}</td>
+            <td>${a2}</td>
+            <td>
+                <select onchange="changeSegmentLaw(${i}, this.value)">
+                    ${options}
+                </select>
+            </td>`;
+        tbody.appendChild(row);
+    }
+}
+
+function changeSegmentLaw(index, lawId){
+    if (currentMovementIndex === null) return;
+    const movement = movements[currentMovementIndex];
+    rebuildSegmentLaws(movement);
+    movement.segmentLaws[index] = lawId;
+    saveData();
+    updateDerivedCharts();
+}
+
+// --- Punkt hinzufügen/ändern ---
 function addOrUpdatePoint(){
     if(currentMovementIndex===null){ alert('Bitte zuerst eine Bewegung erstellen / Please create a movement first.'); return;}
     const x = parseFloat(document.getElementById('xCoord').value);
@@ -315,9 +390,11 @@ function addOrUpdatePoint(){
     });
     movement.points = clean;
 
+    rebuildSegmentLaws(movement);
     movement.dataset.data = movement.points;
     chart.update();
     refreshTable();
+    refreshSegmentTable();
     updateDerivedCharts();
     document.getElementById('xCoord').value='';
     document.getElementById('yCoord').value='';
@@ -335,13 +412,16 @@ function editPoint(index){
 function deletePoint(index){
     const movement = movements[currentMovementIndex];
     movement.points.splice(index+1,1);
+    rebuildSegmentLaws(movement);
     movement.dataset.data = movement.points;
     chart.update();
     refreshTable();
+    refreshSegmentTable();
     updateDerivedCharts();
     saveData();
 }
 
+// --- Toggle Movements ---
 function updateToggleMovements(){
     const div=document.getElementById('toggleMovements');
     div.innerHTML='';
@@ -363,6 +443,7 @@ function toggleMovement(index, visible){
     saveData();
 }
 
+// --- PDF Export ---
 function exportPDF(){
     const { jsPDF } = window.jspdf;
     const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a3' });
@@ -385,7 +466,7 @@ function exportPDF(){
     pdf.save('Hub_Diagram_A3.pdf');
 }
 
-// --- Vertikale Linie hinzufügen ---
+// --- Vertikale Linie ---
 function addVerticalLine() {
     const xValue = parseFloat(document.getElementById('verticalLineX').value);
     if (isNaN(xValue) || xValue < 0 || xValue > 360) {
@@ -413,10 +494,10 @@ function addVerticalLine() {
     chart.update();
 }
 
-/* ========= Abgeleitete Diagramme: Geschwindigkeit & Beschleunigung ========= */
+/* ========= Hilfsfunktionen für Interpolation ========= */
 
 function buildCleanPoints(movement) {
-    if (!movement) return [];
+    if (!movement || !movement.points) return [];
     const pts = movement.points.slice().filter(p => !isNaN(p.x) && !isNaN(p.y));
     pts.sort((a,b)=>a.x-b.x);
     const clean = [];
@@ -430,25 +511,49 @@ function buildCleanPoints(movement) {
     return clean;
 }
 
-// Smoothstep Interpolation wie im Macro
-function strokeAt(angle, pts) {
+function interpSegment(angle, a1, a2, y1, y2, lawId){
+    const t = (angle - a1) / (a2 - a1);
+    let s;
+    switch (lawId) {
+        case 'linear':
+            s = t;
+            break;
+        case 'shm': // simple harmonic
+            s = (1 - Math.cos(Math.PI * t)) / 2;
+            break;
+        case 'cycloidal':
+            s = t - (1/(2*Math.PI))*Math.sin(2*Math.PI*t);
+            break;
+        case 'poly345':
+            s = 10*t*t*t - 15*t*t*t*t + 6*t*t*t*t*t;
+            break;
+        case 'smoothstep':
+        default:
+            s = 3*t*t - 2*t*t*t;
+            break;
+    }
+    return y1 + (y2 - y1) * s;
+}
+
+function strokeAtAngle(angle, movement, pts){
     if (!pts || pts.length === 0) return 0;
     if (angle <= pts[0].x) return pts[0].y;
     if (angle >= pts[pts.length-1].x) return pts[pts.length-1].y;
-
-    for (let i=0; i<pts.length-1; i++) {
+    const laws = movement.segmentLaws || [];
+    for (let i=0; i<pts.length-1; i++){
         const a1 = pts[i].x;
         const y1 = pts[i].y;
         const a2 = pts[i+1].x;
         const y2 = pts[i+1].y;
-        if (a1 <= angle && angle <= a2) {
-            const t = (angle - a1) / (a2 - a1);
-            const s = 3*t*t - 2*t*t*t; // smoothstep
-            return y1 + (y2 - y1) * s;
+        if (a1 <= angle && angle <= a2){
+            const law = laws[i] || defaultLawId;
+            return interpSegment(angle, a1, a2, y1, y2, law);
         }
     }
     return pts[pts.length-1].y;
 }
+
+/* ========= Abgeleitete Diagramme: Geschwindigkeit & Beschleunigung ========= */
 
 function updateDerivedCharts() {
     if (currentMovementIndex === null || !movements[currentMovementIndex]) {
@@ -461,6 +566,7 @@ function updateDerivedCharts() {
 
     const movement = movements[currentMovementIndex];
     const pts = buildCleanPoints(movement);
+    rebuildSegmentLaws(movement);
 
     if (pts.length < 2) {
         velChart.data.datasets = [];
@@ -476,7 +582,7 @@ function updateDerivedCharts() {
 
     for (let a = 0; a <= 360; a += stepDeg) {
         angles.push(a);
-        y.push(strokeAt(a, pts));
+        y.push(strokeAtAngle(a, movement, pts));
     }
 
     const n = angles.length;
@@ -526,7 +632,7 @@ function updateDerivedCharts() {
     accChart.update();
 }
 
-/* ========= FreeCAD Macro Export (Cam, smooth) ========= */
+/* ========= FreeCAD Macro Export (Cam, per-segment laws) ========= */
 function exportFreeCADMacro() {
     if (currentMovementIndex === null) {
         alert("Bitte zuerst eine Bewegung auswählen.");
@@ -534,30 +640,44 @@ function exportFreeCADMacro() {
     }
 
     const movement = movements[currentMovementIndex];
-    let pts = movement.points.slice();
+    let pts = buildCleanPoints(movement);
+    rebuildSegmentLaws(movement);
+    const laws = movement.segmentLaws || [];
+
     if (pts.length < 2){
         alert("Nicht genug Punkte für ein Makro.");
         return;
     }
 
-    // sort & dedupe by angle
-    pts.sort((a,b)=>a.x-b.x);
-    const clean = [];
-    let lastX = null;
-    pts.forEach(p=>{
-        if (p.x !== lastX) {
-            clean.push(p);
-            lastX = p.x;
-        }
-    });
-
     // ensure 0° and 360° exist
-    if (clean[0].x > 0) clean.unshift({x:0, y:clean[0].y});
-    if (clean[clean.length-1].x < 360) clean.push({x:360, y:clean[clean.length-1].y});
+    if (pts[0].x > 0) pts.unshift({x:0, y:pts[0].y});
+    if (pts[pts.length-1].x < 360) pts.push({x:360, y:pts[pts.length-1].y});
+
+    // build segment law list aligned with pts segments
+    const exportLaws = [];
+    const origPts = buildCleanPoints(movement);
+    const origLaws = laws;
+    for (let i=0; i<pts.length-1; i++){
+        const a1 = pts[i].x;
+        const a2 = pts[i+1].x;
+        let lawId = defaultLawId;
+        for (let j=0; j<origPts.length-1; j++){
+            if (origPts[j].x === a1 && origPts[j+1].x === a2){
+                lawId = origLaws[j] || defaultLawId;
+                break;
+            }
+        }
+        exportLaws.push(lawId);
+    }
 
     let pyPoints = "";
-    clean.forEach(p=>{
+    pts.forEach(p=>{
         pyPoints += `    [${p.x}, ${p.y}],\n`;
+    });
+
+    let pyLaws = "";
+    exportLaws.forEach(l=>{
+        pyLaws += `    "${l}",\n`;
     });
 
     const macro = `
@@ -566,6 +686,10 @@ import Part, math
 
 motion_points = [
 ${pyPoints}
+]
+
+segment_laws = [
+${pyLaws}
 ]
 
 # sort and remove duplicate angles
@@ -589,16 +713,30 @@ step_angle    = 0.5
 angle_offset  = 180.0
 cam_thickness = 12.0
 
-def smoothstep(a, a1, a2, y1, y2):
+def interp_segment(a, a1, a2, y1, y2, law):
     t = (a - a1) / (a2 - a1)
-    return y1 + (y2 - y1) * (3*t*t - 2*t*t*t)
+    if law == "linear":
+        s = t
+    elif law == "shm":
+        s = 0.5 * (1 - math.cos(math.pi * t))
+    elif law == "cycloidal":
+        s = t - (1.0/(2.0*math.pi)) * math.sin(2.0*math.pi*t)
+    elif law == "poly345":
+        s = 10*t**3 - 15*t**4 + 6*t**5
+    else:  # smoothstep
+        s = 3*t*t - 2*t*t*t
+    return y1 + (y2 - y1) * s
 
 def lift_at(a):
     for i in range(len(motion_points)-1):
         a1, y1 = motion_points[i]
         a2, y2 = motion_points[i+1]
         if a1 <= a <= a2:
-            return smoothstep(a, a1, a2, y1, y2)
+            if i < len(segment_laws):
+                law = segment_laws[i]
+            else:
+                law = "smoothstep"
+            return interp_segment(a, a1, a2, y1, y2, law)
     return motion_points[-1][1]
 
 points = []
@@ -645,6 +783,7 @@ function clearAll() {
     updateMovementSelect();
     updateToggleMovements();
     document.querySelector('#pointsTable tbody').innerHTML = '';
+    document.querySelector('#segmentTable tbody').innerHTML = '';
     velChart.data.datasets = [];
     accChart.data.datasets = [];
     velChart.update();
@@ -678,15 +817,20 @@ function importFromExcel(file) {
             const ws = workbook.Sheets[name];
             const rows = XLSX.utils.sheet_to_json(ws, { header: 1 });
             const color = colors[i % colors.length];
-            const points = rows.slice(1).map(r => ({x: parseFloat(r[0]), y: parseFloat(r[1])})).filter(p => !isNaN(p.x));
+            const points = rows.slice(1)
+                .map(r => ({x: parseFloat(r[0]), y: parseFloat(r[1])}))
+                .filter(p => !isNaN(p.x) && !isNaN(p.y));
             const dataset = { label: name, data: points, borderColor: color, fill:false, tension:0 };
-            movements.push({ name, dataset, points, visible:true });
+            const movement = { name, dataset, points, visible:true, segmentLaws:[] };
+            rebuildSegmentLaws(movement);
+            movements.push(movement);
             chart.data.datasets.push(dataset);
         });
         chart.update();
         updateMovementSelect();
         updateToggleMovements();
         refreshTable();
+        refreshSegmentTable();
         updateDerivedCharts();
         saveData();
         alert("Daten erfolgreich importiert!");
