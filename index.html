@@ -55,6 +55,24 @@
     <input type="number" id="cycleDuration" min="0" step="0.1" value="1">
 </div>
 
+<!-- Cam parameters -->
+<h3>Cam Parameters:</h3>
+
+<div class="form-group">
+    <label for="baseRadius">Base Radius (mm):</label>
+    <input type="number" id="baseRadius" value="125" step="1">
+</div>
+
+<div class="form-group">
+    <label for="camThickness">Cam Thickness (mm):</label>
+    <input type="number" id="camThickness" value="12" step="0.1">
+</div>
+
+<div class="form-group">
+    <label for="angleOffset">Angle Offset (deg):</label>
+    <input type="number" id="angleOffset" value="180" step="1">
+</div>
+
 <!-- Eingabe für vertikale Linie -->
 <div class="form-group">
     <label for="verticalLineX">Vertikale Linie bei X (°): </label>
@@ -96,7 +114,7 @@
 <canvas id="accChart" width="900" height="300"></canvas>
 
 <div style="text-align:center; margin-top:20px;">
-    <button id="exportPDFBtn">Diagramm als A3 PDF speichern / Save as A3 PDF</button>
+    <button id="exportPDFBtn">Alle Diagramme als A3 PDF speichern / Save all as A3 PDF</button>
     <button id="exportExcelBtn">📤 Daten exportieren (Excel)</button>
     <input type="file" id="importExcelInput" style="display:none" accept=".xlsx">
     <button id="importExcelBtn">📥 Daten importieren (Excel)</button>
@@ -106,7 +124,7 @@
 <!-- CAD Makro Export -->
 <div style="text-align:center; margin-top:10px;">
     <button id="exportMacroBtn">🧩 FreeCAD Makro (.FCMacro)</button>
-    <button id="exportSolidWorksBtn">🟦 Export SolidWorks Macro (.swp)</button>
+    <button id="exportSolidWorksBtn">🟦 Export SolidWorks Macro (.txt)</button>
 </div>
 
 <div class="footer-link">
@@ -133,6 +151,14 @@ let movements = [];
 let currentMovementIndex = null;
 let editingIndex = null;
 let cycleDuration = 1;
+
+// --- helper: cam parameters ---
+function getCamParameters() {
+    const baseRadius   = parseFloat(document.getElementById("baseRadius").value)   || 125;
+    const camThickness = parseFloat(document.getElementById("camThickness").value) || 12;
+    const angleOffset  = parseFloat(document.getElementById("angleOffset").value)  || 180;
+    return { baseRadius, camThickness, angleOffset };
+}
 
 // --- Charts ---
 const ctx = document.getElementById('myChart').getContext('2d');
@@ -442,27 +468,62 @@ function toggleMovement(index, visible){
     saveData();
 }
 
-// --- PDF Export (nur Hubdiagramm) ---
+/* ========= PDF Export: All 3 diagrams on one A3 page ========= */
 function exportPDF(){
     const { jsPDF } = window.jspdf;
     const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a3' });
-    const canvas = document.getElementById('myChart');
-    const imgData = canvas.toDataURL('image/png', 1.0);
-    const pageWidth = pdf.internal.pageSize.getWidth();
+
+    const cStroke = document.getElementById('myChart');
+    const cVel    = document.getElementById('velChart');
+    const cAcc    = document.getElementById('accChart');
+
+    const imgStroke = cStroke.toDataURL('image/png', 1.0);
+    const imgVel    = cVel.toDataURL('image/png', 1.0);
+    const imgAcc    = cAcc.toDataURL('image/png', 1.0);
+
+    const pageWidth  = pdf.internal.pageSize.getWidth();
     const pageHeight = pdf.internal.pageSize.getHeight();
-    const margin = 15;
-    const pdfWidth = pageWidth - 2*margin;
-    const pdfHeight = pageHeight - 2*margin;
-    pdf.addImage(imgData, 'PNG', margin, margin, pdfWidth, pdfHeight);
+    const margin = 10;
+    const gap = 5;
+    const availWidth = pageWidth - 2*margin;
+
+    function scaledHeight(canvas){
+        return availWidth * (canvas.height / canvas.width);
+    }
+
+    let h1 = scaledHeight(cStroke);
+    let h2 = scaledHeight(cVel);
+    let h3 = scaledHeight(cAcc);
+
+    let totalH = h1 + h2 + h3 + 2*gap;
+    const maxH = pageHeight - 2*margin - 15;
+
+    if (totalH > maxH){
+        const scale = maxH / totalH;
+        h1 *= scale;
+        h2 *= scale;
+        h3 *= scale;
+        totalH = h1 + h2 + h3 + 2*gap;
+    }
+
+    let y = margin;
+
+    pdf.addImage(imgStroke, 'PNG', margin, y, availWidth, h1);
+    y += h1 + gap;
+    pdf.addImage(imgVel, 'PNG', margin, y, availWidth, h2);
+    y += h2 + gap;
+    pdf.addImage(imgAcc, 'PNG', margin, y, availWidth, h3);
+
     const footerText = "Developed by Eng. Zaher Taleb | Visit my YouTube Channel";
     const linkURL = "https://www.youtube.com/@Zaher.Taleb.mechanical.design";
-    pdf.setFontSize(12);
+    pdf.setFontSize(10);
     const textWidth = pdf.getTextWidth(footerText);
     const xPos = (pageWidth - textWidth) / 2;
-    const yPos = pageHeight - 10;
+    const yPos = pageHeight - 5;
     pdf.text(footerText, xPos, yPos);
-    pdf.link(xPos, yPos - 5, textWidth, 10, { url: linkURL });
-    pdf.save('Hub_Diagram_A3.pdf');
+    pdf.link(xPos, yPos - 4, textWidth, 6, { url: linkURL });
+
+    pdf.save('Cam_Diagrams_A3.pdf');
 }
 
 // --- Vertikale Linie ---
@@ -639,6 +700,7 @@ function exportFreeCADMacro() {
         return;
     }
 
+    const params = getCamParameters();
     const movement = movements[currentMovementIndex];
     let pts = buildCleanPoints(movement);
     rebuildSegmentLaws(movement);
@@ -704,10 +766,10 @@ if motion_points[0][0] > 0:
 if motion_points[-1][0] < 360:
     motion_points.append([360, motion_points[-1][1]])
 
-base_radius   = 125.0
+base_radius   = ${params.baseRadius}
 step_angle    = 0.5
-angle_offset  = 180.0
-cam_thickness = 12.0
+angle_offset  = ${params.angleOffset}
+cam_thickness = ${params.camThickness}
 
 def interp_segment(a, a1, a2, y1, y2, law):
     t = (a - a1) / (a2 - a1)
@@ -780,9 +842,8 @@ print("Cam created successfully with BSpline approximation.")
     aLink.click();
 }
 
-/* ========= SolidWorks Macro Export – VBA Sketch Spline ========= */
-/* ========= SolidWorks Macro Export – FIXED (Units in meters) ========= */
-function exportSolidWorksMacro() {
+/* ========= SolidWorks Macro Export – TXT VBA file, scaled to meters ========= */
+function exportSolidWorksMacroTXT() {
     if (currentMovementIndex === null) {
         alert("Please select a movement first.");
         return;
@@ -793,42 +854,45 @@ function exportSolidWorksMacro() {
     rebuildSegmentLaws(movement);
 
     if (pts.length < 2) {
-        alert("Not enough points to export a SolidWorks macro.");
+        alert("Not enough points to export.");
         return;
     }
 
-    // Ensure 0° and 360° exist
-    if (pts[0].x > 0) pts.unshift({x:0, y:pts[0].y});
-    if (pts[pts.length-1].x < 360) pts.push({x:360, y:pts[pts.length-1].y});
+    const params = getCamParameters();
+    const baseRadius = params.baseRadius;   // mm
+    const angleOffset = params.angleOffset; // deg
+
+    // Ensure 0° and 360°
+    if (pts[0].x > 0) pts.unshift({x: 0, y: pts[0].y});
+    if (pts[pts.length - 1].x < 360) pts.push({x: 360, y: pts[pts.length - 1].y});
 
     // Sample points every 0.5°
     const step = 0.5;
     const samplePts = [];
-    const baseRadius = 125;   // mm
-
     for (let a = 0; a <= 360; a += step) {
-        const L = strokeAtAngle(a, movement, pts);     // lift in mm
-        const radiusMm = baseRadius + L;               // mm
-        const radiusM = radiusMm / 1000;               // convert to meters
+        const L = strokeAtAngle(a, movement, pts);   // lift in mm
+        const radiusMm = baseRadius + L;             // mm
+        const radiusM = radiusMm / 1000.0;           // meters for SolidWorks
 
-        const th = -(a + 180) * Math.PI / 180;
+        const th = -(a + angleOffset) * Math.PI / 180;
         const x = radiusM * Math.cos(th);
         const y = radiusM * Math.sin(th);
-
-        samplePts.push({x, y});
+        samplePts.push({ x, y });
     }
 
-    // Build VB arrays
-    const n = samplePts.length - 1;
-    let vbX = "", vbY = "", vbZ = "";
+    let vbaX = "";
+    let vbaY = "";
+    let vbaZ = "";
 
-    for (let i = 0; i <= n; i++) {
-        vbX += `    xArr(${i}) = ${samplePts[i].x.toFixed(6)}\n`;
-        vbY += `    yArr(${i}) = ${samplePts[i].y.toFixed(6)}\n`;
-        vbZ += `    zArr(${i}) = 0#\n`;
+    for (let i = 0; i < samplePts.length; i++) {
+        vbaX += `    xArr(${i}) = ${samplePts[i].x.toFixed(6)}\n`;
+        vbaY += `    yArr(${i}) = ${samplePts[i].y.toFixed(6)}\n`;
+        vbaZ += `    zArr(${i}) = 0#\n`;
     }
 
-    const swMacro =
+    const count = samplePts.length - 1;
+
+    const macroText =
 `Option Explicit
 
 Dim swApp As SldWorks.SldWorks
@@ -841,24 +905,21 @@ Sub main()
     Set swModel = swApp.NewPart
     Set swSketchMgr = swModel.SketchManager
 
-    ' Start a sketch on Front Plane
     swSketchMgr.InsertSketch True
 
-    Dim xArr(${n}) As Double
-    Dim yArr(${n}) As Double
-    Dim zArr(${n}) As Double
+    Dim xArr(${count}) As Double
+    Dim yArr(${count}) As Double
+    Dim zArr(${count}) As Double
 
-${vbX}
-${vbY}
-${vbZ}
+${vbaX}
+${vbaY}
+${vbaZ}
 
-    ' Build flattened point array: (x1, y1, z1, x2, y2, z2, ...)
-    Dim pts((${n}+1)*3 - 1) As Double
-    Dim k As Long
+    Dim pts((${count}+1)*3 - 1) As Double
+    Dim i As Long, k As Long
     k = 0
-    
-    Dim i As Long
-    For i = 0 To ${n}
+
+    For i = 0 To ${count}
         pts(k) = xArr(i): k = k + 1
         pts(k) = yArr(i): k = k + 1
         pts(k) = zArr(i): k = k + 1
@@ -874,12 +935,13 @@ ${vbZ}
 End Sub
 `;
 
-    const blob = new Blob([swMacro], { type: "text/plain" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = (movement.name || "CamProfile") + ".txt";
-    a.click();
+    const blob = new Blob([macroText], { type: "text/plain" });
+    const aLink = document.createElement("a");
+    aLink.href = URL.createObjectURL(blob);
+    aLink.download = (movement.name || "CamProfile") + "_SolidWorksMacro.txt";
+    aLink.click();
 }
+
 // 🧹 Alles löschen
 function clearAll() {
     if (!confirm("Bist du sicher, dass du alle Daten löschen willst?")) return;
@@ -957,7 +1019,7 @@ document.getElementById('exportExcelBtn').addEventListener('click', exportToExce
 document.getElementById('importExcelBtn').addEventListener('click', () => document.getElementById('importExcelInput').click());
 document.getElementById('importExcelInput').addEventListener('change', e => importFromExcel(e.target.files[0]));
 document.getElementById('exportMacroBtn').addEventListener('click', exportFreeCADMacro);
-document.getElementById('exportSolidWorksBtn').addEventListener('click', exportSolidWorksMacro);
+document.getElementById('exportSolidWorksBtn').addEventListener('click', exportSolidWorksMacroTXT);
 
 // --- Beim Start gespeicherte Daten laden ---
 loadData();
