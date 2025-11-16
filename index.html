@@ -8,6 +8,7 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@2.2.1/dist/chartjs-plugin-annotation.min.js"></script>
 
+<!-- jsPDF + html2canvas -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 
@@ -15,277 +16,158 @@
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
 <style>
-    body {
-        font-family: Arial, sans-serif;
-        background: linear-gradient(135deg, #f0f4f8, #e5ecf5);
-        padding: 20px;
-        color: #222;
-    }
-    h2 {
-        text-align:center;
-        margin-bottom:15px;
-    }
-    h3 {
-        margin-top:25px;
-        margin-bottom:10px;
-        border-left:4px solid #0077b5;
-        padding-left:8px;
-        font-size:18px;
-    }
-    .container {
-        max-width:1100px;
-        margin:0 auto;
-        background:white;
-        padding:20px 24px 30px;
-        border-radius:14px;
-        box-shadow:0 10px 25px rgba(0,0,0,0.08);
-    }
-    .form-group {
-        display:flex;
-        flex-wrap:wrap;
-        align-items:center;
-        margin-bottom:12px;
-        gap:10px;
-    }
-    .form-group label {
-        margin-right:10px;
-        min-width:140px;
-        font-size:14px;
-    }
-    .form-group input,
-    .form-group select {
-        padding:6px 10px;
-        border-radius:6px;
-        border:1px solid #ccc;
-        font-size:14px;
-    }
-    button {
-        padding:6px 12px;
-        border:none;
-        border-radius:6px;
-        background:#0077b5;
-        color:white;
-        cursor:pointer;
-        transition:0.2s;
-        flex-shrink:0;
-        font-size:13px;
-    }
-    button:hover {
-        background:#005f8d;
-    }
-    button.secondary {
-        background:#e0e6ed;
-        color:#333;
-    }
-    button.secondary:hover {
-        background:#cfd6e0;
-    }
-    table {
-        border-collapse: collapse;
-        margin-top: 10px;
-        width:100%;
-        font-size:13px;
-    }
-    th, td {
-        border: 1px solid #ccc;
-        padding: 6px 10px;
-        text-align:center;
-    }
-    th {
-        background:#0077b5;
-        color:white;
-    }
+    body { font-family: Arial, sans-serif; background-color:#f5f5f5; padding: 20px; }
+    h2 { text-align:center; margin-bottom:20px; }
+    .container { max-width:1000px; margin:0 auto; background:white; padding:20px; border-radius:10px; box-shadow:0 0 15px rgba(0,0,0,0.1); }
+    .form-group { display:flex; flex-wrap:wrap; align-items:center; margin-bottom:15px; gap:10px; }
+    .form-group label { margin-right:10px; min-width:120px; }
+    .form-group input, .form-group select { padding:5px 10px; border-radius:5px; border:1px solid #ccc; }
+    button { padding:6px 12px; border:none; border-radius:5px; background:#0077b5; color:white; cursor:pointer; transition:0.2s; flex-shrink:0; }
+    button:hover { background:#005f8d; }
+    table { border-collapse: collapse; margin-top: 10px; width:100%; }
+    th, td { border: 1px solid #ccc; padding: 8px 12px; text-align:center; }
+    th { background:#0077b5; color:white; }
     #myChart, #velChart, #accChart {
-        margin-top:16px;
-        background:white;
-        border-radius:10px;
-        box-shadow:0 0 10px rgba(0,0,0,0.05);
-        padding:10px;
+        margin-top:20px; background:white; border-radius:10px;
+        box-shadow:0 0 10px rgba(0,0,0,0.1); padding:15px;
     }
-    .footer-link {
-        margin-top:20px;
-        font-size:14px;
-        text-align:center;
-    }
-    .footer-link a {
-        display:inline-block;
-        padding:5px 10px;
-        background:#0077b5;
-        color:white;
-        border-radius:5px;
-        text-decoration:none;
-        font-weight:bold;
-        transition:0.2s;
-    }
+    .footer-link { margin-top:20px; font-size:14px; text-align:center; }
+    .footer-link a { display:inline-block; padding:5px 10px; background:#0077b5; color:white; border-radius:5px; text-decoration:none; font-weight:bold; transition:0.2s; }
     .footer-link a:hover { background:#005f8d; }
-
-    /* Cards / Sections */
-    .section-card {
-        margin-top:16px;
-        padding:14px 16px;
-        border-radius:10px;
-        background:#fafbff;
-        border:1px solid #dde2ee;
-    }
-
-    /* Follower + Cam Profile Canvas */
-    #followerCanvas,
-    #camProfileCanvas {
-        background:white;
-        border:1px solid #ccc;
-        border-radius:8px;
-        margin-top:10px;
-    }
 </style>
 </head>
 <body>
 <div class="container">
 <h2>Hub-Diagramm / Stroke Diagram</h2>
 
-<div class="section-card">
-    <h3>Bewegungen & Grundparameter</h3>
-    <div class="form-group">
-        <label for="movementName">Bewegung Name / Movement Name: </label>
-        <input type="text" id="movementName">
-        <button id="addMovementBtn">Neue Bewegung / New Movement</button>
-    </div>
-
-    <div class="form-group">
-        <label for="movementSelect">Bearbeite Bewegung / Edit Movement: </label>
-        <select id="movementSelect"></select>
-    </div>
-
-    <div class="form-group">
-        <label for="cycleDuration">Zykluszeit (s) / Cycle Time (s): </label>
-        <input type="number" id="cycleDuration" min="0" step="0.1" value="1">
-    </div>
-
-    <!-- Cam parameters -->
-    <h4 style="margin-top:10px; margin-bottom:4px;">Cam Parameters</h4>
-
-    <div class="form-group">
-        <label for="baseRadius">Base Radius (mm):</label>
-        <input type="number" id="baseRadius" value="125" step="1">
-    </div>
-
-    <div class="form-group">
-        <label for="camThickness">Cam Thickness (mm):</label>
-        <input type="number" id="camThickness" value="12" step="0.1">
-    </div>
-
-    <div class="form-group">
-        <label for="angleOffset">Angle Offset (deg):</label>
-        <input type="number" id="angleOffset" value="180" step="1">
-    </div>
-
-    <div class="form-group">
-        <label for="holeDiameter">Hole Diameter (mm):</label>
-        <input type="number" id="holeDiameter" value="20" step="0.1">
-    </div>
+<div class="form-group">
+    <label for="movementName">Bewegung Name / Movement Name: </label>
+    <input type="text" id="movementName">
+    <button id="addMovementBtn">Neue Bewegung / New Movement</button>
 </div>
 
-<div class="section-card">
-    <h3>Punkte & Bewegungsdefinition</h3>
-
-    <!-- Eingabe für vertikale Linie -->
-    <div class="form-group">
-        <label for="verticalLineX">Vertikale Linie bei X (°): </label>
-        <input type="number" id="verticalLineX" min="0" max="360">
-        <button id="addLineBtn" class="secondary">Linie hinzufügen</button>
-    </div>
-
-    <div class="form-group">
-        <label for="xCoord">X (0-360°): </label>
-        <input type="number" id="xCoord" min="0" max="360">
-        <label for="yCoord">Y: </label>
-        <input type="number" id="yCoord">
-        <button id="addPointBtn">Hinzufügen / Update</button>
-    </div>
-
-    <h4>Bewegungen ein-/ausblenden / Show/Hide Movements:</h4>
-    <div id="toggleMovements" style="margin-bottom:8px;"></div>
-    <div class="form-group">
-        <label>
-            <input type="checkbox" id="toggleSmoothPreview" checked>
-            Show Smooth Curve Preview
-        </label>
-    </div>
-
-    <h4>Punkte</h4>
-    <table id="pointsTable">
-        <thead>
-            <tr><th>#</th><th>X</th><th>Y</th><th>Aktionen / Actions</th></tr>
-        </thead>
-        <tbody></tbody>
-    </table>
-
-    <h4 style="margin-top:14px;">Bewegungsgesetze pro Segment / Motion laws per segment:</h4>
-    <table id="segmentTable">
-        <thead>
-            <tr><th>#</th><th>Von (°)</th><th>Bis (°)</th><th>Gesetz / Law</th></tr>
-        </thead>
-        <tbody></tbody>
-    </table>
+<div class="form-group">
+    <label for="movementSelect">Bearbeite Bewegung / Edit Movement: </label>
+    <select id="movementSelect"></select>
 </div>
 
-<div class="section-card">
-    <h3>Diagramme: Hub, Geschwindigkeit, Beschleunigung</h3>
-    <!-- Hub / Stroke chart -->
-    <canvas id="myChart" width="900" height="400"></canvas>
-    <!-- Velocity chart -->
-    <canvas id="velChart" width="900" height="300"></canvas>
-    <!-- Acceleration chart -->
-    <canvas id="accChart" width="900" height="300"></canvas>
-
-    <!-- NEW: 2D Cam Profile -->
-    <h3 style="margin-top:20px;">Cam Profile (2D View)</h3>
-    <p style="font-size:12px; margin-top:4px;">
-        Profil wird aus Base Radius + Hub berechnet und rotiert mit der Follower-Simulation.
-    </p>
-    <canvas id="camProfileCanvas" width="400" height="400"></canvas>
+<div class="form-group">
+    <label for="cycleDuration">Zykluszeit (s) / Cycle Time (s): </label>
+    <input type="number" id="cycleDuration" min="0" step="0.1" value="1">
 </div>
 
-<div class="section-card">
-    <h3>Follower Animation</h3>
+<!-- Cam parameters -->
+<h3>Cam Parameters:</h3>
 
-    <div class="form-group">
-        <button id="playFollowerBtn">▶ Play</button>
-        <button id="pauseFollowerBtn">⏸ Pause</button>
-        <button id="resetFollowerBtn">⏹ Reset</button>
-    </div>
-
-    <!-- SPEED CONTROL -->
-    <div class="form-group">
-        <label for="simSpeed">Animation Speed:</label>
-        <input type="range" id="simSpeed" min="10" max="200" value="50" step="5">
-        <span id="simSpeedValue">50 ms/step</span>
-    </div>
-
-    <!-- CANVAS FOR FOLLOWER PREVIEW -->
-    <canvas id="followerCanvas"
-            width="500"
-            height="220">
-    </canvas>
+<div class="form-group">
+    <label for="baseRadius">Base Radius (mm):</label>
+    <input type="number" id="baseRadius" value="125" step="1">
 </div>
 
-<div class="section-card">
-    <h3>Daten & Export</h3>
-    <div style="text-align:center; margin-bottom:16px;">
-        <button id="exportPDFBtn">Alle Diagramme als A3 PDF speichern / Save all as A3 PDF</button>
-    </div>
+<div class="form-group">
+    <label for="camThickness">Cam Thickness (mm):</label>
+    <input type="number" id="camThickness" value="12" step="0.1">
+</div>
 
-    <div style="text-align:center; margin-bottom:12px;">
-        <button id="exportExcelBtn">📤 Daten exportieren (Excel)</button>
-        <input type="file" id="importExcelInput" style="display:none" accept=".xlsx">
-        <button id="importExcelBtn" class="secondary">📥 Daten importieren (Excel)</button>
-        <button id="clearAllBtn" style="background:#ff5555;">🧹 Alles löschen</button>
-    </div>
+<div class="form-group">
+    <label for="angleOffset">Angle Offset (deg):</label>
+    <input type="number" id="angleOffset" value="180" step="1">
+</div>
 
-    <!-- CAD Makro Export -->
-    <div style="text-align:center; margin-top:10px;">
-        <button id="exportMacroBtn">🧩 FreeCAD Makro (.FCMacro)</button>
-        <button id="exportSolidWorksBtn">🟦 Export SolidWorks Macro (.txt)</button>
-    </div>
+<div class="form-group">
+    <label for="holeDiameter">Hole Diameter (mm):</label>
+    <input type="number" id="holeDiameter" value="20" step="0.1">
+</div>
+
+<!-- Eingabe für vertikale Linie -->
+<div class="form-group">
+    <label for="verticalLineX">Vertikale Linie bei X (°): </label>
+    <input type="number" id="verticalLineX" min="0" max="360">
+    <button id="addLineBtn">Linie hinzufügen</button>
+</div>
+
+<div class="form-group">
+    <label for="xCoord">X (0-360°): </label>
+    <input type="number" id="xCoord" min="0" max="360">
+    <label for="yCoord">Y: </label>
+    <input type="number" id="yCoord">
+    <button id="addPointBtn">Hinzufügen / Update</button>
+</div>
+
+<h3>Bewegungen ein-/ausblenden / Show/Hide Movements:</h3>
+<div id="toggleMovements"></div>
+
+<div class="form-group">
+    <label>
+        <input type="checkbox" id="toggleSmoothPreview" checked>
+        Show Smooth Curve Preview
+    </label>
+</div>
+
+<table id="pointsTable">
+    <thead>
+        <tr><th>#</th><th>X</th><th>Y</th><th>Aktionen / Actions</th></tr>
+    </thead>
+    <tbody></tbody>
+</table>
+
+<h3>Bewegungsgesetze pro Segment / Motion laws per segment:</h3>
+<table id="segmentTable">
+    <thead>
+        <tr><th>#</th><th>Von (°)</th><th>Bis (°)</th><th>Gesetz / Law</th></tr>
+    </thead>
+    <tbody></tbody>
+</table>
+
+<!-- Hub / Stroke chart -->
+<canvas id="myChart" width="900" height="400"></canvas>
+<!-- Velocity chart -->
+<canvas id="velChart" width="900" height="300"></canvas>
+<!-- Acceleration chart -->
+<canvas id="accChart" width="900" height="300"></canvas>
+<small id="jerkInfo" style="display:block; margin-top:4px; text-align:right; font-size:12px; color:#555;">
+    Max jerk: –
+</small>
+
+<h3>Follower Animation</h3>
+
+<div class="form-group">
+    <button id="playFollowerBtn">▶ Play</button>
+    <button id="pauseFollowerBtn">⏸ Pause</button>
+    <button id="resetFollowerBtn">⏹ Reset</button>
+</div>
+
+<h3>Cam Rotation Preview</h3>
+<canvas id="camCanvas" width="400" height="400"
+        style="background:white; border:1px solid #ccc; border-radius:6px; margin-bottom:20px;">
+</canvas>
+
+<!-- SPEED CONTROL -->
+<div class="form-group">
+    <label for="simSpeed">Animation Speed:</label>
+    <input type="range" id="simSpeed" min="10" max="200" value="50" step="5">
+    <span id="simSpeedValue">50 ms/step</span>
+</div>
+
+<!-- CANVAS FOR FOLLOWER PREVIEW -->
+<canvas id="followerCanvas"
+        width="500"
+        height="400"
+        style="background:white; border:1px solid #ccc; border-radius:6px; margin-top:10px;">
+</canvas>
+
+<div style="text-align:center; margin-top:20px;">
+    <button id="exportPDFBtn">Alle Diagramme als A3 PDF speichern / Save all as A3 PDF</button>
+    <button id="exportExcelBtn">📤 Daten exportieren (Excel)</button>
+    <input type="file" id="importExcelInput" style="display:none" accept=".xlsx">
+    <button id="importExcelBtn">📥 Daten importieren (Excel)</button>
+    <button id="clearAllBtn" style="background:#ff5555;">🧹 Alles löschen</button>
+</div>
+
+<!-- CAD Makro Export -->
+<div style="text-align:center; margin-top:10px;">
+    <button id="exportMacroBtn">🧩 FreeCAD Makro (.FCMacro)</button>
+    <button id="exportSolidWorksBtn">🟦 Export SolidWorks Macro (.txt)</button>
 </div>
 
 <div class="footer-link">
@@ -323,11 +205,6 @@ let smoothPreviewDataset = {
     tension: 0
 };
 
-// Follower simulation state
-let simRunning = false;
-let simAngle = 0;       // deg
-let lastSimTime = null;
-
 // --- helper: cam parameters ---
 function getCamParameters() {
     const baseRadius   = parseFloat(document.getElementById("baseRadius").value)   || 125;
@@ -347,7 +224,11 @@ const chart = new Chart(ctx, {
     data: { datasets: [] },
     options: {
         scales: {
-            x: { type: 'linear', min:0, max:360, ticks:{stepSize:10, callback:formatXAxisTick}, title:{display:true,text:'Winkel (°) & Zeit (ms) / Angle (°) & Time (ms)'} },
+            x: {
+                type: 'linear', min:0, max:360,
+                ticks:{ stepSize:10, callback:formatXAxisTick },
+                title:{display:true,text:'Winkel (°) & Zeit (ms) / Angle (°) & Time (ms)'}
+            },
             y: { beginAtZero:true, title:{display:true,text:'Hub (mm) / Stroke (mm)'} }
         },
         plugins: {
@@ -459,7 +340,8 @@ function loadData() {
             refreshSegmentTable();
             updateDerivedCharts();
             updateSmoothPreview();
-            drawSimulation(); // initial static draw (also draws cam profile)
+            drawFollower(0);
+            drawCamPreview(0);
         }
     }
 }
@@ -486,7 +368,8 @@ function addMovement() {
     refreshSegmentTable();
     updateDerivedCharts();
     updateSmoothPreview();
-    drawSimulation();
+    drawFollower(0);
+    drawCamPreview(0);
     saveData();
 }
 
@@ -508,7 +391,8 @@ function selectMovement(){
     refreshSegmentTable();
     updateDerivedCharts();
     updateSmoothPreview();
-    drawSimulation();
+    drawFollower(0);
+    drawCamPreview(0);
 }
 
 function formatXAxisTick(value){
@@ -585,7 +469,8 @@ function changeSegmentLaw(index, lawId){
     saveData();
     updateDerivedCharts();
     updateSmoothPreview();
-    drawSimulation();
+    drawFollower(0);
+    drawCamPreview(0);
 }
 
 // --- Punkt hinzufügen/ändern ---
@@ -623,7 +508,8 @@ function addOrUpdatePoint(){
     refreshSegmentTable();
     updateDerivedCharts();
     updateSmoothPreview();
-    drawSimulation();
+    drawFollower(0);
+    drawCamPreview(0);
     document.getElementById('xCoord').value='';
     document.getElementById('yCoord').value='';
     saveData();
@@ -647,7 +533,8 @@ function deletePoint(index){
     refreshSegmentTable();
     updateDerivedCharts();
     updateSmoothPreview();
-    drawSimulation();
+    drawFollower(0);
+    drawCamPreview(0);
     saveData();
 }
 
@@ -662,8 +549,7 @@ function updateToggleMovements(){
         checkbox.addEventListener('change', ()=>toggleMovement(i, checkbox.checked));
         const label=document.createElement('label');
         label.htmlFor='toggle_'+i; label.innerText=m.name;
-        label.style.marginRight = "10px";
-        div.appendChild(checkbox); div.appendChild(label);
+        div.appendChild(checkbox); div.appendChild(label); div.appendChild(document.createTextNode(' '));
     });
 }
 
@@ -849,14 +735,17 @@ function updateSmoothPreview() {
     chart.update();
 }
 
-/* ========= Abgeleitete Diagramme: Geschwindigkeit & Beschleunigung ========= */
+/* ========= Abgeleitete Diagramme: Geschwindigkeit, Beschleunigung, Max Jerk ========= */
 
 function updateDerivedCharts() {
+    const jerkInfoEl = document.getElementById('jerkInfo');
+
     if (currentMovementIndex === null || !movements[currentMovementIndex]) {
         velChart.data.datasets = [];
         accChart.data.datasets = [];
         velChart.update();
         accChart.update();
+        if (jerkInfoEl) jerkInfoEl.textContent = "Max jerk: –";
         return;
     }
 
@@ -869,6 +758,7 @@ function updateDerivedCharts() {
         accChart.data.datasets = [];
         velChart.update();
         accChart.update();
+        if (jerkInfoEl) jerkInfoEl.textContent = "Max jerk: –";
         return;
     }
 
@@ -892,6 +782,7 @@ function updateDerivedCharts() {
 
     let vel = new Array(n).fill(0);  // mm/s
     let acc = new Array(n).fill(0);  // mm/s²
+    let jerk = new Array(n).fill(0); // mm/s³
 
     if (cycleDuration > 0) {
         const omega = 360 / cycleDuration;        // deg/s
@@ -906,9 +797,15 @@ function updateDerivedCharts() {
         }
         acc[0] = (vel[1] - vel[0]) / dt;
         acc[n-1] = (vel[n-1] - vel[n-2]) / dt;
+
+        for (let i=1; i<n-1; i++) {
+            jerk[i] = (acc[i+1] - acc[i-1]) / (2*dt); // mm/s³
+        }
+        jerk[0] = (acc[1] - acc[0]) / dt;
+        jerk[n-1] = (acc[n-1] - acc[n-2]) / dt;
     }
 
-    // Convert to SI units for display: mm/s → m/s, mm/s² → m/s²
+    // Convert to SI units for display: mm/s → m/s, mm/s² → m/s², mm/s³ → m/s³
     velChart.data.datasets = [{
         label: 'Geschwindigkeit',
         data: angles.map((a,i)=>({x:a,y:vel[i]/1000})),        // m/s
@@ -928,85 +825,284 @@ function updateDerivedCharts() {
     velChart.update();
     accChart.update();
 
+    // Max jerk info
+    let maxAbsJerk = 0;
+    for (let i=0; i<n; i++) {
+        const val = Math.abs(jerk[i]);
+        if (val > maxAbsJerk) maxAbsJerk = val;
+    }
+    if (jerkInfoEl) {
+        if (cycleDuration > 0) {
+            jerkInfoEl.textContent = "Max jerk: " + (maxAbsJerk/1000).toFixed(2) + " m/s³";
+        } else {
+            jerkInfoEl.textContent = "Max jerk: –";
+        }
+    }
+
     // also update smooth preview
     updateSmoothPreview();
 }
 
-/* ========= Follower Animation System ========= */
-let simPlaying = false;
+/* ========= Unified Follower + Cam Animation ========= */
+
+let simAngle = 0;
 let simInterval = null;
-let simSpeedMs = 50; // default speed from slider
+let simSpeedMs = 50; // ms per step (from slider)
 
 const followerCanvas = document.getElementById("followerCanvas");
 const followerCtx = followerCanvas.getContext("2d");
 
+const camCanvas = document.getElementById("camCanvas");
+const camCtx = camCanvas.getContext("2d");
+
 function drawFollower(angleDeg) {
     if (!followerCtx) return;
 
+    const w = followerCanvas.width;
+    const h = followerCanvas.height;
+    followerCtx.clearRect(0, 0, w, h);
+
+    if (currentMovementIndex === null || !movements[currentMovementIndex]) {
+        // Nothing defined yet -> just show axes text
+        followerCtx.fillStyle = "#000";
+        followerCtx.font = "14px Arial";
+        followerCtx.fillText("Create a movement to see follower motion.", 40, h/2);
+        return;
+    }
+
     const movement = movements[currentMovementIndex];
-    if (!movement) return;
-
     const pts = buildCleanPoints(movement);
+    if (pts.length < 2) {
+        followerCtx.fillStyle = "#000";
+        followerCtx.font = "14px Arial";
+        followerCtx.fillText("Add at least 2 points for motion.", 40, h/2);
+        return;
+    }
+
     const lift = strokeAtAngle(angleDeg, movement, pts);
+    const maxStroke = pts.reduce((m,p)=>Math.max(m,p.y),0) || 1;
 
-    const centerX = followerCanvas.width / 2;
-    const centerY = followerCanvas.height - 20;
+    const margin = 40;
+    const baseY = h - margin;
+    const followerX = w * 0.7;
 
-    followerCtx.clearRect(0, 0, followerCanvas.width, followerCanvas.height);
+    const scale = (h - 2*margin) / maxStroke; // mm → px
+    const followerY = baseY - lift * scale;
 
     // Ground line
-    followerCtx.beginPath();
     followerCtx.strokeStyle = "#999";
     followerCtx.lineWidth = 2;
-    followerCtx.moveTo(20, centerY);
-    followerCtx.lineTo(followerCanvas.width - 20, centerY);
+    followerCtx.beginPath();
+    followerCtx.moveTo(margin, baseY);
+    followerCtx.lineTo(w - margin, baseY);
     followerCtx.stroke();
 
-    // Vertical guide
-    followerCtx.beginPath();
+    // Guide for follower
     followerCtx.strokeStyle = "#444";
-    followerCtx.moveTo(centerX, 20);
-    followerCtx.lineTo(centerX, centerY);
+    followerCtx.beginPath();
+    followerCtx.moveTo(followerX, margin);
+    followerCtx.lineTo(followerX, baseY);
     followerCtx.stroke();
 
-    // Follower rod
-    const followerY = centerY - lift;
+    // Zero-line (0 mm)
+    followerCtx.setLineDash([4,4]);
+    followerCtx.strokeStyle = "#00aa00";
+    const yZero = baseY;
     followerCtx.beginPath();
+    followerCtx.moveTo(margin, yZero);
+    followerCtx.lineTo(followerX - 20, yZero);
+    followerCtx.stroke();
+
+    // Max stroke line
+    const yMax = baseY - maxStroke * scale;
+    followerCtx.strokeStyle = "#aa0000";
+    followerCtx.beginPath();
+    followerCtx.moveTo(margin, yMax);
+    followerCtx.lineTo(followerX - 20, yMax);
+    followerCtx.stroke();
+    followerCtx.setLineDash([]);
+
+    // Follower stem
     followerCtx.strokeStyle = "red";
     followerCtx.lineWidth = 4;
-    followerCtx.moveTo(centerX, centerY);
-    followerCtx.lineTo(centerX, followerY);
+    followerCtx.beginPath();
+    followerCtx.moveTo(followerX, baseY);
+    followerCtx.lineTo(followerX, followerY);
     followerCtx.stroke();
 
     // Follower head
     followerCtx.beginPath();
     followerCtx.fillStyle = "blue";
-    followerCtx.arc(centerX, followerY, 6, 0, Math.PI * 2);
+    followerCtx.arc(followerX, followerY, 8, 0, Math.PI * 2);
     followerCtx.fill();
 
-    // Info text
+    // Small cam disk on the left (just indication)
+    const params = getCamParameters();
+    const baseR = params.baseRadius;
+    const camX = w * 0.25;
+    const camY = baseY - (maxStroke * scale) / 2;
+    const camR = 40;
+
+    // --- draw rotating cam ---
+followerCtx.save();
+followerCtx.translate(camX, camY);
+followerCtx.rotate(-angleDeg * Math.PI / 180);
+
+// Draw base cam circle
+followerCtx.strokeStyle = "#555";
+followerCtx.lineWidth = 2;
+followerCtx.beginPath();
+followerCtx.arc(0, 0, camR, 0, Math.PI * 2);
+followerCtx.stroke();
+
+followerCtx.restore();   // ← IMPORTANT
+
+// --- draw FIXED follower rod ---
+followerCtx.beginPath();
+followerCtx.strokeStyle = "red";
+followerCtx.lineWidth = 4;
+followerCtx.moveTo(followerX, baseY);
+followerCtx.lineTo(followerX, followerY);
+followerCtx.stroke();
+
+// follower head
+followerCtx.beginPath();
+followerCtx.fillStyle = "blue";
+followerCtx.arc(followerX, followerY, 6, 0, Math.PI * 2);
+followerCtx.fill();
+
+    // Reference radius
+    followerCtx.strokeStyle = "#0077b5";
+    followerCtx.beginPath();
+    followerCtx.moveTo(0,0);
+    followerCtx.lineTo(camR,0);
+    followerCtx.stroke();
+    followerCtx.restore();
+
+    // Text info
     followerCtx.fillStyle = "#000";
-    followerCtx.font = "12px Arial";
-    followerCtx.fillText(`Angle: ${angleDeg.toFixed(1)}°`, 20, 20);
-    followerCtx.fillText(`Stroke: ${lift.toFixed(2)} mm`, 20, 36);
-    followerCtx.fillText(`Cycle: ${cycleDuration.toFixed(2)} s`, 20, 52);
+    followerCtx.font = "13px Arial";
+    followerCtx.fillText(`Angle: ${angleDeg.toFixed(1)}°`, margin, margin + 10);
+    followerCtx.fillText(`Stroke: ${lift.toFixed(2)} mm`, margin, margin + 25);
+    followerCtx.fillText(`Max stroke: ${maxStroke.toFixed(2)} mm`, margin, margin + 40);
 }
 
-function stepFollower() {
+function drawCamPreview(angleDeg) {
+    if (!camCtx) return;
+
+    const w = camCanvas.width;
+    const h = camCanvas.height;
+    camCtx.clearRect(0,0,w,h);
+
+    const params = getCamParameters();
+    const baseR = params.baseRadius;
+    const angleOffset = params.angleOffset;
+
+    const cx = w / 2;
+    const cy = h / 2;
+    const scale = 1; // px per mm
+
+    if (currentMovementIndex === null || !movements[currentMovementIndex]) {
+        // Draw just base circle rotating indicator
+        camCtx.strokeStyle = "#0077b5";
+        camCtx.lineWidth = 3;
+        camCtx.beginPath();
+        camCtx.arc(cx, cy, baseR * 0.8 * scale, 0, Math.PI*2);
+        camCtx.stroke();
+
+        camCtx.beginPath();
+        camCtx.fillStyle = "#444";
+        camCtx.arc(cx, cy, 10, 0, Math.PI*2);
+        camCtx.fill();
+
+        // Rotation indicator line (fixed reference, does NOT rotate)
+       // Fixed follower direction line (does NOT rotate with cam)
+	camCtx.strokeStyle = "red";
+	camCtx.beginPath();
+	camCtx.moveTo(cx, cy);
+	// straight up, length = base radius - 10
+	camCtx.lineTo(cx, cy - (baseR - 10));
+	camCtx.stroke();
+
+
+        return;
+    }
+
+    const movement = movements[currentMovementIndex];
+    const pts = buildCleanPoints(movement);
+    if (pts.length < 2) {
+        // Same fallback: base circle only
+        camCtx.strokeStyle = "#0077b5";
+        camCtx.lineWidth = 3;
+        camCtx.beginPath();
+        camCtx.arc(cx, cy, baseR * 0.8 * scale, 0, Math.PI*2);
+        camCtx.stroke();
+
+        camCtx.beginPath();
+        camCtx.fillStyle = "#444";
+        camCtx.arc(cx, cy, 10, 0, Math.PI*2);
+        camCtx.fill();
+
+        camCtx.strokeStyle = "red";
+        camCtx.beginPath();
+        camCtx.moveTo(cx, cy);
+        camCtx.lineTo(
+            cx + Math.cos(-angleDeg * Math.PI/180) * baseR * 0.7 * scale,
+            cy + Math.sin(-angleDeg * Math.PI/180) * baseR * 0.7 * scale
+        );
+        camCtx.stroke();
+        return;
+    }
+
+    // Draw cam outline (60 sample points)
+    const camPath = [];
+    for (let a = 0; a < 360; a += 6) {
+        const lift = strokeAtAngle((a + angleDeg) % 360, movement, pts);
+        const r = baseR + lift;
+        const th = -(a + angleOffset) * Math.PI / 180;
+        const x = cx + Math.cos(th) * r * scale;
+        const y = cy + Math.sin(th) * r * scale;
+        camPath.push({x,y});
+    }
+
+    camCtx.strokeStyle = "#0077b5";
+    camCtx.lineWidth = 3;
+    camCtx.beginPath();
+    camCtx.moveTo(camPath[0].x, camPath[0].y);
+    camPath.forEach(p => camCtx.lineTo(p.x, p.y));
+    camCtx.closePath();
+    camCtx.stroke();
+
+    // Center circle (cam shaft)
+    camCtx.beginPath();
+    camCtx.fillStyle = "#444";
+    camCtx.arc(cx, cy, 10, 0, Math.PI*2);
+    camCtx.fill();
+
+    // Rotation indicator line using same angleDeg
+    camCtx.strokeStyle = "red";
+    camCtx.beginPath();
+    camCtx.moveTo(cx, cy);
+    camCtx.lineTo(
+        cx + Math.cos(-angleDeg * Math.PI/180) * (baseR - 10) * scale,
+        cy + Math.sin(-angleDeg * Math.PI/180) * (baseR - 10) * scale
+    );
+    camCtx.stroke();
+}
+
+function stepSimulation() {
     simAngle += 2; // degrees per frame
     if (simAngle > 360) simAngle = 0;
     drawFollower(simAngle);
-    drawCamProfile(simAngle);
+    drawCamPreview(simAngle);
 }
 
 function startFollower() {
     if (simInterval) return;
-    simPlaying = true;
-    simInterval = setInterval(stepFollower, simSpeedMs);
+    simInterval = setInterval(stepSimulation, simSpeedMs);
 }
 
 function pauseFollower() {
-    simPlaying = false;
     if (simInterval) {
         clearInterval(simInterval);
         simInterval = null;
@@ -1017,7 +1113,7 @@ function resetFollower() {
     pauseFollower();
     simAngle = 0;
     drawFollower(0);
-    drawCamProfile(0);
+    drawCamPreview(0);
 }
 
 // Speed slider
@@ -1030,91 +1126,20 @@ simSpeedInput.addEventListener("input", () => {
 
     if (simInterval) {
         clearInterval(simInterval);
-        simInterval = setInterval(stepFollower, simSpeedMs);
+        simInterval = setInterval(stepSimulation, simSpeedMs);
     }
 });
 
-// Button bindings
+// Follower buttons
 document.getElementById("playFollowerBtn").addEventListener("click", startFollower);
 document.getElementById("pauseFollowerBtn").addEventListener("click", pauseFollower);
 document.getElementById("resetFollowerBtn").addEventListener("click", resetFollower);
 
-// Initialize follower viewer
+// Initialize follower + cam view
 drawFollower(0);
+drawCamPreview(0);
 
-/* ========= NEW: Cam Profile Rendering (2D View) ========= */
-const camProfileCanvas = document.getElementById("camProfileCanvas");
-const camProfileCtx = camProfileCanvas ? camProfileCanvas.getContext("2d") : null;
-
-function drawCamProfile(angleDeg) {
-    if (!camProfileCtx) return;
-
-    camProfileCtx.clearRect(0,0,camProfileCanvas.width, camProfileCanvas.height);
-
-    if (currentMovementIndex === null || !movements[currentMovementIndex]) return;
-
-    const movement = movements[currentMovementIndex];
-    const pts = buildCleanPoints(movement);
-    rebuildSegmentLaws(movement);
-    if (pts.length < 2) return;
-
-    const params = getCamParameters();
-    const baseRadius = params.baseRadius;
-    const angleOffset = params.angleOffset;
-
-    // Maximaler Hub für Skalierung
-    let maxLift = 0;
-    pts.forEach(p => { if (p.y > maxLift) maxLift = p.y; });
-    const maxRadius = baseRadius + maxLift;
-
-    const w = camProfileCanvas.width;
-    const h = camProfileCanvas.height;
-    const cx = w / 2;
-    const cy = h / 2;
-    const maxRadiusPx = 0.9 * Math.min(w, h) / 2;
-    const scale = maxRadius > 0 ? (maxRadiusPx / maxRadius) : 1;
-
-    camProfileCtx.save();
-    camProfileCtx.translate(cx, cy);
-
-    // Base circle (Pitch circle)
-    camProfileCtx.beginPath();
-    camProfileCtx.strokeStyle = "#cccccc";
-    camProfileCtx.lineWidth = 1;
-    camProfileCtx.arc(0, 0, baseRadius * scale, 0, 2*Math.PI);
-    camProfileCtx.stroke();
-
-    // Cam profile curve
-    camProfileCtx.beginPath();
-    const stepDeg = 2;
-    for (let a=0; a<=360; a+=stepDeg){
-        const L = strokeAtAngle(a, movement, pts);
-        const r = (baseRadius + L) * scale;
-        const th = -(a + angleOffset + angleDeg) * Math.PI/180;
-        const x = r * Math.cos(th);
-        const y = r * Math.sin(th);
-        if (a === 0) camProfileCtx.moveTo(x,y);
-        else camProfileCtx.lineTo(x,y);
-    }
-    camProfileCtx.closePath();
-    camProfileCtx.strokeStyle = "#0077b5";
-    camProfileCtx.lineWidth = 2;
-    camProfileCtx.stroke();
-
-    // Reference radius line
-    const refR = baseRadius * scale;
-    const refTh = -(angleOffset + angleDeg) * Math.PI/180;
-    camProfileCtx.beginPath();
-    camProfileCtx.moveTo(0,0);
-    camProfileCtx.lineTo(refR*Math.cos(refTh), refR*Math.sin(refTh));
-    camProfileCtx.strokeStyle = "#ff6f61";
-    camProfileCtx.lineWidth = 1.5;
-    camProfileCtx.stroke();
-
-    camProfileCtx.restore();
-}
-
-/* ========= FreeCAD Macro Export ========= */
+/* ========= FreeCAD Macro Export – BSpline Approximation + Hole ========= */
 function exportFreeCADMacro() {
     if (currentMovementIndex === null) {
         alert("Bitte zuerst eine Bewegung auswählen.");
@@ -1269,7 +1294,7 @@ print("Cam created successfully with BSpline approximation and center hole.")
     aLink.click();
 }
 
-/* ========= SolidWorks Macro Export ========= */
+/* ========= SolidWorks Macro Export – TXT VBA file, scaled to meters ========= */
 function exportSolidWorksMacroTXT() {
     if (currentMovementIndex === null) {
         alert("Please select a movement first.");
@@ -1386,8 +1411,10 @@ function clearAll() {
     accChart.data.datasets = [];
     velChart.update();
     accChart.update();
-    drawSimulation();
-    drawCamProfile(0);
+    const jerkInfoEl = document.getElementById('jerkInfo');
+    if (jerkInfoEl) jerkInfoEl.textContent = "Max jerk: –";
+    drawFollower(0);
+    drawCamPreview(0);
     alert("Alle Daten wurden gelöscht!");
 }
 
@@ -1435,23 +1462,12 @@ function importFromExcel(file) {
         refreshSegmentTable();
         updateDerivedCharts();
         updateSmoothPreview();
-        drawSimulation();
-        drawCamProfile(0);
+        drawFollower(0);
+        drawCamPreview(0);
         saveData();
         alert("Daten erfolgreich importiert!");
     };
     reader.readAsArrayBuffer(file);
-}
-
-/* ========= Simple Cam + Follower Simulation (angle-based) ========= */
-// Diese Simulation nutzt simAngle nur für Text & Cam-Profile.
-// Follower nutzt sein eigenes Interval (oben), aber für Konsistenz
-// verwenden wir hier denselben Winkel.
-
-function drawSimulation() {
-    // Hier nur dafür da, um bei Änderungen (Punkte, Parameter) neu zu zeichnen
-    drawFollower(simAngle);
-    drawCamProfile(simAngle);
 }
 
 /* ========= Event Listener ========= */
@@ -1464,17 +1480,18 @@ document.getElementById('addLineBtn').addEventListener('click', addVerticalLine)
 document.getElementById('clearAllBtn').addEventListener('click', clearAll);
 document.getElementById('exportExcelBtn').addEventListener('click', exportToExcel);
 document.getElementById('importExcelBtn').addEventListener('click', () => document.getElementById('importExcelInput').click());
-document.getElementById('importExcelInput').addEventListener('change', e => importFromExcel(e.target.files[0]));
-document.getElementById('exportMacroBtn').addEventListener('click', exportFreeCADMacro);
+document.getElementById('importExcelInput').addEventListener('change', e => importFromExcel(e.target.files[0]));document.getElementById('importExcelInput').addEventListener('change', e => importFromExcel(e.target.files[0]));
+document.getElementById('exportMacroBtn').addEventListener('click', exportFreeCADMacro);document.getElementById('exportMacroBtn').addEventListener('click', exportFreeCADMacro);
 document.getElementById('exportSolidWorksBtn').addEventListener('click', exportSolidWorksMacroTXT);
 document.getElementById("toggleSmoothPreview").addEventListener("change", function () {
     smoothPreviewDataset.hidden = !this.checked;
     chart.update();
-});
+});});
 
 // --- Beim Start gespeicherte Daten laden ---
 loadData();
-drawSimulation(); // initial draw (Follower + Cam Profile)
+drawFollower(0);
+drawCamPreview(0);
 </script>
 </body>
 </html>
