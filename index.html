@@ -1046,10 +1046,8 @@ function drawCamPreview(angleDeg) {
         camCtx.strokeStyle = "red";
         camCtx.beginPath();
         camCtx.moveTo(cx, cy);
-        camCtx.lineTo(
-            cx + Math.cos(-angleDeg * Math.PI/180) * baseR * 0.7 * scale,
-            cy + Math.sin(-angleDeg * Math.PI/180) * baseR * 0.7 * scale
-        );
+        // Fixed reference line pointing upward (does not rotate with the cam)
+        camCtx.lineTo(cx, cy - (baseR - 10) * scale);
         camCtx.stroke();
         return;
     }
@@ -1079,14 +1077,11 @@ function drawCamPreview(angleDeg) {
     camCtx.arc(cx, cy, 10, 0, Math.PI*2);
     camCtx.fill();
 
-    // Rotation indicator line using same angleDeg
+    // Fixed reference line pointing upward (does not rotate with the cam)
     camCtx.strokeStyle = "red";
     camCtx.beginPath();
     camCtx.moveTo(cx, cy);
-    camCtx.lineTo(
-        cx + Math.cos(-angleDeg * Math.PI/180) * (baseR - 10) * scale,
-        cy + Math.sin(-angleDeg * Math.PI/180) * (baseR - 10) * scale
-    );
+    camCtx.lineTo(cx, cy - (baseR - 10) * scale);
     camCtx.stroke();
 }
 
