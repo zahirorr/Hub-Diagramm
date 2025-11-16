@@ -1481,12 +1481,12 @@ document.getElementById('clearAllBtn').addEventListener('click', clearAll);
 document.getElementById('exportExcelBtn').addEventListener('click', exportToExcel);
 document.getElementById('importExcelBtn').addEventListener('click', () => document.getElementById('importExcelInput').click());
 document.getElementById('importExcelInput').addEventListener('change', e => importFromExcel(e.target.files[0]));document.getElementById('importExcelInput').addEventListener('change', e => importFromExcel(e.target.files[0]));
-document.getElementById('exportMacroBtn').addEventListener('click', exportFreeCADMacro);document.getElementById('exportMacroBtn').addEventListener('click', exportFreeCADMacro);
+document.getElementById('exportMacroBtn').addEventListener('click', exportFreeCADMacro);
 document.getElementById('exportSolidWorksBtn').addEventListener('click', exportSolidWorksMacroTXT);
 document.getElementById("toggleSmoothPreview").addEventListener("change", function () {
     smoothPreviewDataset.hidden = !this.checked;
     chart.update();
-});});
+});
 
 // --- Beim Start gespeicherte Daten laden ---
 loadData();
